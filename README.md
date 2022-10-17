@@ -203,8 +203,6 @@ async:
 
 #### 提供以下几个bean
 
-> 如果系统中引入的有ID发号系统，则该章节大多数情况下可以忽略；
-
 ```java
 
 import java.util.UUID;
