@@ -1,0 +1,29 @@
+@startuml
+autonumber
+
+== 任务生成 ==
+client -> client: 调用任务生成接口
+client -> DB: 将任务保存到DB中
+client -> queue: 将任务按照执行时间顺序添加到内存队列中（如果当前开启的有事务，则该步骤在事务回调中执行）
+client -> queue: 判断当前队列是否超过最大长度，如果超过，则将队列中最后一个任务删除
+client -> client: 任务添加完成，返回
+
+
+
+== 任务执行 ==
+client -> queue: 获取待执行任务
+queue --> client: 返回一个当前待执行任务（状态是ready、到达执行时间的任务）
+client -> DB: CAS更新任务（根据任务预期执行时间与状态来更新）
+alt CAS更新失败
+  client -> DB: 从数据库更新任务
+  client -> client: 判断任务当前是否可执行（状态是ready、到达执行时间），如果是可执行重复执行CAS更新；如果不可执行则直接返回
+end
+
+client -> client: 执行任务（执行时根据配置选择是否开启事务）
+alt 任务执行成功
+  client -> DB: 更新任务状态为失败
+else 任务执行失败
+  client -> client: 根据任务当前重试次数获取任务下次执行时间（如果任务）
+  client -> client: 将下次执行时间更新到数据库，将任务重新加入队列，等待下次执行
+end
+@enduml

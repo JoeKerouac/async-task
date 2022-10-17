@@ -1,0 +1,28 @@
+async:
+  service:
+    # 任务缓存队列大小，0表示队列无限长，队列设置太小可能会影响性能；
+    cache-queue-size: 100
+    # 触发捞取任务的队列长度阈值，当任务缓存队列的实际长度小于等于该值时会触发任务捞取，应该小于{@link #cacheQueueSize}；
+    load-threshold: 30
+    # 当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒，注意不要配置太大，不然
+    # 应用的其他副本如果挂了，那个副本添加的任务就需要很长时间才会被本副本发现；
+    load-interval: 5000
+    # 触发定时监控的时间间隔，单位毫秒
+    monitor-interval: 5000
+    # 数据源名称，如果系统没有提供{@link com.github.joekerouac.async.task.spi.ConnectionSelector ConnectionSelector}这个bean，则需要提供数据源的名称
+    data-source: "asyncDataSource"
+    # 实际执行任务的线程池配置
+    thread-pool-config:
+      core-pool-size: 3
+      thread-name: async-worker
+  task:
+    id:
+      tag: test
+flow:
+  service:
+    # 流式任务节点关系构建参数，一次最多对多少个流式任务进行节点关系构建，设置过大可能会导致内存问题，如果不了解原理请勿修改默认值；
+    flow-task-batch-size: 10
+    # 对于流式任务，一次构建多少个节点关系；
+    # PS：一般情况下不建议设置太大，因为在某些场景下可能因为某些任务数特别多的流式任务导致阻塞其他所有任务的正常执行，也不建议设置太小，否则可能影响性能；除非深入了解过处理原理，否则不建议修改默认值；
+    stream-node-map-batch-size: 200
+

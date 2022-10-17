@@ -1,0 +1,90 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>async-task-core</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+    <name>async-task-core</name>
+    <description>异步任务调度框架核心包</description>
+    <url>https://github.com/JoeKerouac/async-task</url>
+
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <scm>
+        <url>https://github.com/JoeKerouac/async-task</url>
+        <connection>scm:git:https://github.com/JoeKerouac/async-task.git</connection>
+        <developerConnection>scm:git:https://github.com/JoeKerouac/async-task.git</developerConnection>
+    </scm>
+
+    <developers>
+        <developer>
+            <name>JoeKerouac</name>
+            <email>1213812243@qq.com</email>
+        </developer>
+    </developers>
+
+    <parent>
+        <groupId>com.github.JoeKerouac</groupId>
+        <artifactId>async-task</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <properties>
+        <common-tools.version>1.0.0</common-tools.version>
+        <slf4j.version>1.7.5</slf4j.version>
+        <lombok.version>1.18.10</lombok.version>
+        <testng.version>6.14.3</testng.version>
+        <druid.version>1.1.21</druid.version>
+        <sqlite.version>3.36.0.3</sqlite.version>
+    </properties>
+
+    <dependencies>
+        <!-- 常用工具类 -->
+        <dependency>
+            <groupId>com.github.JoeKerouac</groupId>
+            <artifactId>common-tools</artifactId>
+            <version>${common-tools.version}</version>
+        </dependency>
+
+        <!-- 日志 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <!-- lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <version>${testng.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid</artifactId>
+            <version>${druid.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>${sqlite.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+
+</project>

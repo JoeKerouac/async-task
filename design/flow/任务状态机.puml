@@ -1,0 +1,15 @@
+@startuml
+'https://plantuml.com/state-diagram
+
+scale 350 width
+[*] --> WAIT
+WAIT --> READY: 第一个节点手动调度\n其他节点是父节点调度
+READY --> RUNNING: 异步任务执行时触发
+RUNNING --> SUCCESS: 节点任务执行成功
+RUNNING --> PENDING: 节点任务执行失败且策略为挂起
+RUNNING --> ERROR: 节点任务执行失败且策略为失败
+PENDING --> SUCCESS: 人工处理
+PENDING --> READY: 人工处理
+PENDING --> WAIT: 人工处理
+
+@enduml

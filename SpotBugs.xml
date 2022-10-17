@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<findbugs>
+    <analysisEffort>max</analysisEffort>
+    <minPriority>Low</minPriority>
+    <detectors>
+        <detector name="BadAppletConstructor" enabled="true"/>
+        <detector name="BuildInterproceduralCallGraph" enabled="true"/>
+        <detector name="CallToUnsupportedMethod" enabled="true"/>
+        <detector name="CheckCalls" enabled="true"/>
+        <detector name="CheckExpectedWarnings" enabled="true"/>
+        <detector name="CovariantArrayAssignment" enabled="true"/>
+        <detector name="EmptyZipFileEntry" enabled="true"/>
+        <detector name="FindCircularDependencies" enabled="true"/>
+        <detector name="FindFloatMath" enabled="true"/>
+        <detector name="FindNonSerializableStoreIntoSession" enabled="true"/>
+        <detector name="FindNonSerializableValuePassedToWriteObject" enabled="true"/>
+        <detector name="InefficientIndexOf" enabled="true"/>
+        <detector name="InefficientInitializationInsideLoop" enabled="true"/>
+        <detector name="InefficientMemberAccess" enabled="true"/>
+        <detector name="InefficientToArray" enabled="true"/>
+        <detector name="Noise" enabled="true"/>
+        <detector name="NoiseNullDeref" enabled="true"/>
+        <detector name="NoteNonNullAnnotations" enabled="true"/>
+        <detector name="NoteNonnullReturnValues" enabled="true"/>
+        <detector name="PublicSemaphores" enabled="true"/>
+        <detector name="ResolveAllReferences" enabled="true"/>
+        <detector name="TestASM" enabled="true"/>
+        <detector name="TestDataflowAnalysis" enabled="true"/>
+        <detector name="TestingGround" enabled="true"/>
+        <detector name="TestingGround2" enabled="true"/>
+        <detector name="UselessSubclassMethod" enabled="true"/>
+    </detectors>
+</findbugs>
+
