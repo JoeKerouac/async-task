@@ -195,9 +195,6 @@ async:
     thread-pool-config:
       core-pool-size: 3
       thread-name: async-worker
-  task:
-    id:
-      tag: test
 
 ```
 

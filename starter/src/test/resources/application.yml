@@ -15,9 +15,6 @@ async:
     thread-pool-config:
       core-pool-size: 3
       thread-name: async-worker
-  task:
-    id:
-      tag: test
 flow:
   service:
     # 流式任务节点关系构建参数，一次最多对多少个流式任务进行节点关系构建，设置过大可能会导致内存问题，如果不了解原理请勿修改默认值；
