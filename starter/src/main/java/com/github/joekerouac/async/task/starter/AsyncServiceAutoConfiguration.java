@@ -12,8 +12,6 @@
  */
 package com.github.joekerouac.async.task.starter;
 
-import java.util.Map;
-
 import javax.sql.DataSource;
 
 import org.springframework.beans.BeansException;
@@ -75,11 +73,10 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         config.setMonitorService(monitorService);
         AsyncTaskService service = new AsyncTaskServiceImpl(config);
 
-        @SuppressWarnings("rawtypes")
-        Map<String, AbstractAsyncTaskProcessor> processors = context.getBeansOfType(AbstractAsyncTaskProcessor.class);
+        String[] processors = context.getBeanNamesForType(AbstractAsyncTaskProcessor.class);
 
-        for (final AbstractAsyncTaskProcessor<?> processor : processors.values()) {
-            service.addProcessor(processor);
+        for (final String processor : processors) {
+            service.addProcessor(context.getBean(processor, AbstractAsyncTaskProcessor.class));
         }
 
         return service;
