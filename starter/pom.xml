@@ -34,7 +34,7 @@
     </parent>
 
     <properties>
-        <async-task-core.version>1.0.0</async-task-core.version>
+        <async-task-core.version>1.0.1</async-task-core.version>
         <slf4j.version>1.7.5</slf4j.version>
         <lombok.version>1.18.10</lombok.version>
 
