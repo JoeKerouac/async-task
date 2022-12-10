@@ -130,4 +130,13 @@ public interface AsyncTaskRepository {
      */
     int delete(List<String> requestIds);
 
+    /**
+     * 统计状态为执行中、并且执行时间在指定时间之前的任务
+     * 
+     * @param execTime
+     *            执行时间
+     * @return 任务列表
+     */
+    List<AsyncTask> stat(LocalDateTime execTime);
+
 }

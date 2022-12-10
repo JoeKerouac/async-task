@@ -15,13 +15,7 @@ package com.github.joekerouac.async.task.service;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -29,24 +23,20 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-import com.github.joekerouac.common.tools.collection.Pair;
+import com.github.joekerouac.async.task.Const;
+import com.github.joekerouac.async.task.entity.AsyncTask;
+import com.github.joekerouac.async.task.model.*;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
+import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
+import com.github.joekerouac.common.tools.collection.Pair;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.lock.LockTaskUtil;
 import com.github.joekerouac.common.tools.scheduler.SchedulerTask;
 import com.github.joekerouac.common.tools.scheduler.SimpleSchedulerTask;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
-import com.github.joekerouac.async.task.Const;
-import com.github.joekerouac.async.task.entity.AsyncTask;
-import com.github.joekerouac.async.task.model.AsyncServiceConfig;
-import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
-import com.github.joekerouac.async.task.model.ExecResult;
-import com.github.joekerouac.async.task.model.ExecStatus;
-import com.github.joekerouac.async.task.model.TaskFinishCode;
-import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
-import com.github.joekerouac.async.task.spi.MonitorService;
 
 import lombok.CustomLog;
 
@@ -276,6 +266,13 @@ class AsyncTaskProcessorEngine {
                     Thread.sleep(config.getMonitorInterval());
                     LockTaskUtil.runWithLock(queueLock.readLock(),
                         () -> config.getMonitorService().monitor(queue.size()));
+
+                    // 统计在指定时间之前就开始执行的任务
+                    LocalDateTime execTime = LocalDateTime.now().plus(-config.getExecTimeout(), ChronoUnit.MILLIS);
+                    List<AsyncTask> tasks = repository.stat(execTime);
+                    if (!tasks.isEmpty()) {
+                        config.getMonitorService().taskExecTimeout(tasks, config.getExecTimeout());
+                    }
                 } catch (Throwable throwable) {
                     if (!(throwable instanceof InterruptedException)) {
                         LOGGER.info(throwable, "监听线程异常");

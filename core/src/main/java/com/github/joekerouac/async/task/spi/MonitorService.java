@@ -13,7 +13,9 @@
 package com.github.joekerouac.async.task.spi;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
+import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 
 /**
@@ -33,9 +35,7 @@ public interface MonitorService {
      * @param task
      *            用户的任务
      */
-    default void duplicateTask(String requestId, Object task) {
-
-    }
+    void duplicateTask(String requestId, Object task);
 
     /**
      * 没有找到指定任务处理器，一般是编码异常
@@ -47,9 +47,7 @@ public interface MonitorService {
      * @param processor
      *            任务处理器名
      */
-    default void noProcessor(String requestId, String task, String processor) {
-
-    }
+    void noProcessor(String requestId, String task, String processor);
 
     /**
      * 任务执行异常或者用户的任务处理器返回了重试的结果，并且任务将被重试
@@ -65,10 +63,7 @@ public interface MonitorService {
      * @param execTime
      *            下次重试时间
      */
-    default void processRetry(String requestId, Object task, Object processor, Throwable throwable,
-        LocalDateTime execTime) {
-
-    }
+    void processRetry(String requestId, Object task, Object processor, Throwable throwable, LocalDateTime execTime);
 
     /**
      * 任务执行过程中发生异常或者用户的任务处理器返回了重试的结果，并且无法重试
@@ -84,10 +79,7 @@ public interface MonitorService {
      * @param throwable
      *            异常详情
      */
-    default void processError(String requestId, TaskFinishCode code, Object task, Object processor,
-        Throwable throwable) {
-
-    }
+    void processError(String requestId, TaskFinishCode code, Object task, Object processor, Throwable throwable);
 
     /**
      * 任务反序列化异常
@@ -101,9 +93,7 @@ public interface MonitorService {
      * @param throwable
      *            异常详情
      */
-    default void deserializationError(String requestId, String task, Object processor, Throwable throwable) {
-
-    }
+    void deserializationError(String requestId, String task, Object processor, Throwable throwable);
 
     /**
      * 当前队列中任务数量，每个一段时间该方法都会被调用一次
@@ -111,9 +101,7 @@ public interface MonitorService {
      * @param queueSize
      *            当前队列中任务数量
      */
-    default void monitor(int queueSize) {
-
-    }
+    void monitor(int queueSize);
 
     /**
      * 异步任务线程未处理异常，通常不应该有
@@ -123,8 +111,16 @@ public interface MonitorService {
      * @param e
      *            发生的异常
      */
-    default void uncaughtException(Thread thread, Throwable e) {
+    void uncaughtException(Thread thread, Throwable e);
 
-    }
+    /**
+     * 任务执行超时告警，通常不应该有，如果有可能是服务正在执行就被kill -9了
+     * 
+     * @param tasks
+     *            执行超时的任务
+     * @param timeout
+     *            执行超时时间，单位毫秒
+     */
+    void taskExecTimeout(List<AsyncTask> tasks, long timeout);
 
 }

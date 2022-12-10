@@ -15,6 +15,8 @@ package com.github.joekerouac.async.task;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
+import com.github.joekerouac.common.tools.log.Logger;
+import com.github.joekerouac.common.tools.log.LoggerFactory;
 import com.github.joekerouac.common.tools.net.HostInfo;
 import com.github.joekerouac.common.tools.validator.ValidationService;
 import com.github.joekerouac.common.tools.validator.ValidationServiceImpl;
@@ -25,6 +27,11 @@ import com.github.joekerouac.common.tools.validator.ValidationServiceImpl;
  * @since 1.0.0
  */
 public final class Const {
+
+    /**
+     * 默认的监控日志
+     */
+    public static final Logger DEFAULT_ASYNC_MONITOR_LOGGER = LoggerFactory.getLogger("DEFAULT_ASYNC_MONITOR");
 
     /**
      * 外部系统输入默认编码以及对外输出默认编码

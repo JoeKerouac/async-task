@@ -12,33 +12,39 @@
  */
 package com.github.joekerouac.async.task.impl;
 
-import java.time.LocalDateTime;
+import static com.github.joekerouac.async.task.Const.DEFAULT_ASYNC_MONITOR_LOGGER;
 
-import com.github.joekerouac.common.tools.log.LoggerFactory;
-import com.github.joekerouac.common.tools.log.Logger;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.spi.MonitorService;
 
 /**
- * 监控服务包装
+ * 监控服务包装，内部使用，外部请勿直接使用
  * 
  * @author JoeKerouac
  * @date 2022-10-14 14:37:00
  * @since 1.0.0
  */
-public class MonitorServiceWrapper implements MonitorService {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger("DEFAULT_ASYNC_MONITOR");
+public final class MonitorServiceProxy implements MonitorService {
 
     private final MonitorService monitorService;
 
-    public MonitorServiceWrapper(final MonitorService monitorService) {
+    public MonitorServiceProxy(final MonitorService monitorService) {
         this.monitorService = monitorService;
     }
 
     @Override
+    public void duplicateTask(String requestId, Object task) {
+        if (monitorService != null) {
+            runWithoutEx(() -> monitorService.duplicateTask(requestId, task));
+        }
+    }
+
+    @Override
     public void noProcessor(final String requestId, final String task, final String processor) {
-        LOGGER.info("当前task没有找到指定处理器 [{}:{}:{}]", requestId, task, processor);
         if (monitorService != null) {
             runWithoutEx(() -> monitorService.noProcessor(requestId, task, processor));
         }
@@ -47,7 +53,6 @@ public class MonitorServiceWrapper implements MonitorService {
     @Override
     public void processRetry(final String requestId, final Object task, final Object processor,
         final Throwable throwable, final LocalDateTime execTime) {
-        LOGGER.info(throwable, "任务执行时发生了异常，任务将在稍后重试, [{}:{}:{}:{}]", requestId, task, processor, execTime);
         if (monitorService != null) {
             runWithoutEx(() -> monitorService.processRetry(requestId, task, processor, throwable, execTime));
         }
@@ -56,7 +61,6 @@ public class MonitorServiceWrapper implements MonitorService {
     @Override
     public void processError(final String requestId, final TaskFinishCode code, final Object task,
         final Object processor, final Throwable throwable) {
-        LOGGER.info(throwable, "异步任务执行失败, [{}:{}:{}:{}]", requestId, code, task, processor);
         if (monitorService != null) {
             runWithoutEx(() -> monitorService.processError(requestId, code, task, processor, throwable));
         }
@@ -65,7 +69,6 @@ public class MonitorServiceWrapper implements MonitorService {
     @Override
     public void deserializationError(final String requestId, final String task, final Object processor,
         final Throwable throwable) {
-        LOGGER.info(throwable, "任务反序列化失败, [{}:{}:{}]", requestId, task, processor);
         if (monitorService != null) {
             runWithoutEx(() -> monitorService.deserializationError(requestId, task, processor, throwable));
         }
@@ -73,7 +76,6 @@ public class MonitorServiceWrapper implements MonitorService {
 
     @Override
     public void monitor(final int queueSize) {
-        LOGGER.info("当前队列中任务: [{}]", queueSize);
         if (monitorService != null) {
             runWithoutEx(() -> monitorService.monitor(queueSize));
         }
@@ -81,15 +83,21 @@ public class MonitorServiceWrapper implements MonitorService {
 
     @Override
     public void uncaughtException(final Thread thread, final Throwable e) {
-        LOGGER.info(e, "异步任务线程未处理异常, [{}]", thread);
         if (monitorService != null) {
             runWithoutEx(() -> monitorService.uncaughtException(thread, e));
         }
     }
 
+    @Override
+    public void taskExecTimeout(List<AsyncTask> tasks, long timeout) {
+        if (monitorService != null) {
+            runWithoutEx(() -> monitorService.taskExecTimeout(tasks, timeout));
+        }
+    }
+
     /**
      * 执行指定命令，并且不抛出异常
-     * 
+     *
      * @param runnable
      *            命令
      */
@@ -97,7 +105,7 @@ public class MonitorServiceWrapper implements MonitorService {
         try {
             runnable.run();
         } catch (Throwable throwable) {
-            LOGGER.warn(throwable, "用户监控服务执行异常");
+            DEFAULT_ASYNC_MONITOR_LOGGER.warn(throwable, "用户监控服务执行异常");
         }
     }
 

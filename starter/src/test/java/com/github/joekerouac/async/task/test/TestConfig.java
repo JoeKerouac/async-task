@@ -19,9 +19,9 @@ import javax.sql.DataSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
-import com.github.joekerouac.async.task.test.TestEngine;
 
 /**
  * spring接入时需要提供的几个bean， MonitorService则是完全可以作为可选项，如果有需求了则可以选择实现，没有需求不提供该bean即可；
@@ -36,7 +36,7 @@ public class TestConfig {
     @Bean
     public MonitorService monitorService() {
         // 这里做一个空实现，仅仅是为了示例展示，用户可以自行实现
-        return new MonitorService() {};
+        return new MonitorServiceAdaptor();
     }
 
     @Bean

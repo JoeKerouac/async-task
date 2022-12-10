@@ -21,7 +21,7 @@
 <dependency>
     <groupId>com.github.JoeKerouac</groupId>
     <artifactId>async-task-starter</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
@@ -31,7 +31,7 @@
 <dependency>
     <groupId>com.github.JoeKerouac</groupId>
     <artifactId>async-task-core</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
@@ -78,12 +78,12 @@ import javax.sql.DataSource;
 
 import com.github.joekerouac.async.task.exception.NoTransactionException;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
+import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.TransactionCallback;
 import com.github.joekerouac.async.task.spi.TransactionHook;
 
@@ -136,8 +136,7 @@ public class Test {
             }
         });
         // 监控服务也需要自己实现，系统有一个默认的监控，只打印了日志，用户可以自己在实现来做些其他事情
-        config.setMonitorService(new MonitorService() {
-        });
+        config.setMonitorService(new MonitorServiceAdaptor());
 
         AsyncTaskServiceImpl service = new AsyncTaskServiceImpl(config);
         // 注意，服务使用前一定要启动，使用后一定要关闭，否则可能资源泄露
@@ -201,23 +200,19 @@ async:
 #### 提供以下几个bean
 
 ```java
-
 import java.util.UUID;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
+import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
 
 /**
- * spring接入时需要提供的几个bean
- * 
- * MonitorService则是完全可以作为可选项，如果有需求了则可以选择实现，没有需求不提供该bean即可；
+ * spring接入时需要提供的几个bean， MonitorService则是完全可以作为可选项，如果有需求了则可以选择实现，没有需求不提供该bean即可；
  *
  * @author JoeKerouac
  * @date 2022-10-14 14:37:00
@@ -229,23 +224,16 @@ public class TestConfig {
     @Bean
     public MonitorService monitorService() {
         // 这里做一个空实现，仅仅是为了示例展示，用户可以自行实现
-        return new MonitorService() {
-
-        };
-    }
-
-    @Bean
-    public DataSource asyncDataSource() {
-        // TODO 这里请自行构建数据源，注意这里的方法名（即生成的spring bean name）应该与配置文件中的async.service.data-source一致；
-        return null;
+        return new MonitorServiceAdaptor();
     }
 
     @Bean
     public IDGenerator idGenerator() {
         return () -> UUID.randomUUID().toString();
     }
-    
+
 }
+
 
 ```
 

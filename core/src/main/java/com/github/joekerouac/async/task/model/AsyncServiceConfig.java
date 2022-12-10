@@ -18,12 +18,7 @@ import javax.validation.Valid;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
-import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
-import com.github.joekerouac.async.task.spi.IDGenerator;
-import com.github.joekerouac.async.task.spi.MonitorService;
-import com.github.joekerouac.async.task.spi.TransactionHook;
+import com.github.joekerouac.async.task.spi.*;
 
 import lombok.Data;
 
@@ -68,6 +63,12 @@ public class AsyncServiceConfig {
      */
     @Min(value = 500, message = "监控间隔不能小于500")
     private long monitorInterval = 1000 * 5;
+
+    /**
+     * 任务执行超时监控时间，单位毫秒，如果任务执行超过该时间将会触发监控
+     */
+    @Min(value = 100, message = "任务执行超时监控时间不能小于100")
+    private long execTimeout = 1000 * 5;
 
     /**
      * 实际执行任务的线程池配置

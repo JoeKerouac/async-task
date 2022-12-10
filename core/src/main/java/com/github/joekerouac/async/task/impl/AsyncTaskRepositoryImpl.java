@@ -23,11 +23,6 @@ import java.util.List;
 import javax.sql.DataSource;
 import javax.validation.constraints.NotNull;
 
-import com.github.joekerouac.common.tools.collection.CollectionUtil;
-import com.github.joekerouac.common.tools.constant.StringConst;
-import com.github.joekerouac.common.tools.db.SqlUtil;
-import com.github.joekerouac.common.tools.exception.ExceptionUtil;
-import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.async.task.db.AbstractRepository;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.ExecStatus;
@@ -35,6 +30,11 @@ import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.TableNameSelector;
+import com.github.joekerouac.common.tools.collection.CollectionUtil;
+import com.github.joekerouac.common.tools.constant.StringConst;
+import com.github.joekerouac.common.tools.db.SqlUtil;
+import com.github.joekerouac.common.tools.exception.ExceptionUtil;
+import com.github.joekerouac.common.tools.string.StringUtils;
 
 import lombok.CustomLog;
 
@@ -65,6 +65,12 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
             + "order by `exec_time` asc limit ? offset ?";
 
     private static final String SQL_DELETE = "delete from {} where `request_id` in (" + PLACEHOLDER + ")";
+
+    /**
+     * 统计sql
+     */
+    private static final String SQL_STAT =
+        "select * from {} where `status` = '" + ExecStatus.RUNNING.code() + "' and `gmt_update_time` <= ?";
 
     public AsyncTaskRepositoryImpl(DataSource dataSource) {
         this(dataSource, DEFAULT_TABLE_NAME);
@@ -226,5 +232,13 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
 
         return runSql(requestIds.get(0), SQL_DELETE.replace(PLACEHOLDER, paramsPlaceholder.substring(1)),
             PreparedStatement::executeUpdate, requestIds.toArray());
+    }
+
+    @Override
+    public List<AsyncTask> stat(LocalDateTime execTime) {
+        return runSql(null, SQL_STAT, preparedStatement -> {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            return buildModel(resultSet);
+        }, new Object[] {execTime});
     }
 }

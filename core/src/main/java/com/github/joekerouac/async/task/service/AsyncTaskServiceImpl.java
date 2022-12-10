@@ -22,7 +22,8 @@ import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
-import com.github.joekerouac.async.task.impl.MonitorServiceWrapper;
+import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
+import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
@@ -71,8 +72,9 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
 
         MonitorService monitorService = config.getMonitorService();
-        if (!(monitorService instanceof MonitorServiceWrapper)) {
-            monitorService = new MonitorServiceWrapper(monitorService);
+        monitorService = monitorService == null ? new MonitorServiceAdaptor() : monitorService;
+        if (!(monitorService instanceof MonitorServiceProxy)) {
+            monitorService = new MonitorServiceProxy(monitorService);
         }
         // 这里构建出仓储服务
         AsyncTaskRepository repository = config.getRepository();
