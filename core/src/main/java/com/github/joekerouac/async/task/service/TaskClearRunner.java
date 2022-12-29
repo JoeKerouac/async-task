@@ -15,6 +15,8 @@ package com.github.joekerouac.async.task.service;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import com.github.joekerouac.async.task.entity.AsyncTask;
@@ -44,37 +46,62 @@ public class TaskClearRunner extends AbstractClearRunner {
     private final AsyncTaskRepository asyncTaskRepository;
 
     /**
-     * 保留最近多少小时内执行的任务
+     * 任务清理说明，key是任务所属processor，value是任务保留最短时间，单位小时
      */
-    private final int reserve;
+    private final Map<String, Integer> clearDescMap;
 
-    public TaskClearRunner(final AsyncTaskRepository asyncTaskRepository, final int reserve) {
+    public TaskClearRunner(final AsyncTaskRepository asyncTaskRepository) {
         this.asyncTaskRepository = asyncTaskRepository;
-        this.reserve = reserve;
+        this.clearDescMap = new ConcurrentHashMap<>();
+    }
+
+    /**
+     * 添加待清除的任务说明
+     * 
+     * @param processor
+     *            要清理的任务所属的processor
+     * @param reserve
+     *            任务执行完成后最短保留时间，单位小时
+     */
+    public void addClearDesc(String processor, int reserve) {
+        clearDescMap.put(processor, reserve);
+    }
+
+    /**
+     * 移除待清除的任务说明
+     * 
+     * @param processor
+     *            任务所属的processor
+     */
+    public void removeClearDesc(String processor) {
+        clearDescMap.remove(processor);
     }
 
     /**
      * 清除指定状态的数据
      */
     protected void clear() {
-        boolean hasNext = true;
+        clearDescMap.forEach((processor, reserve) -> {
+            boolean hasNext = true;
 
-        while (hasNext) {
-            final LocalDateTime endTime = LocalDateTime.now().plus(-1 * reserve, ChronoUnit.HOURS);
-            // 注意，这里只清理执行成功的
-            final List<AsyncTask> asyncTasks =
-                asyncTaskRepository.selectFinishPage(TaskFinishCode.SUCCESS, endTime, 0, LOAD_SIZE);
-            if (asyncTasks.isEmpty()) {
-                return;
+            while (hasNext) {
+                final LocalDateTime endTime = LocalDateTime.now().plus(-1L * reserve, ChronoUnit.HOURS);
+                // 注意，这里只清理执行成功的
+                final List<AsyncTask> asyncTasks =
+                    asyncTaskRepository.selectFinishPage(processor, TaskFinishCode.SUCCESS, endTime, 0, LOAD_SIZE);
+                if (asyncTasks.isEmpty()) {
+                    return;
+                }
+
+                final int delete = asyncTaskRepository
+                    .delete(asyncTasks.stream().map(AsyncTask::getRequestId).collect(Collectors.toList()));
+
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("当前要删除 [{}] 条数据，实际删除 [{}]条，当前任务清理说明: [{}:{}]， 当前要删除的数据列表： [{}]", asyncTasks.size(),
+                        delete, processor, reserve, asyncTasks);
+                }
+                hasNext = asyncTasks.size() == LOAD_SIZE;
             }
-
-            final int delete = asyncTaskRepository
-                .delete(asyncTasks.stream().map(AsyncTask::getRequestId).collect(Collectors.toList()));
-
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("当前要删除 [{}] 条数据，实际删除 [{}]条， 当前要删除的数据列表： [{}]", asyncTasks.size(), delete, asyncTasks);
-            }
-            hasNext = asyncTasks.size() == LOAD_SIZE;
-        }
+        });
     }
 }

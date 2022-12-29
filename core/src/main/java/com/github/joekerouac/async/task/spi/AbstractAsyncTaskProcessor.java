@@ -21,10 +21,10 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
-import com.github.joekerouac.common.tools.reflect.type.AbstractTypeReference;
-import com.github.joekerouac.common.tools.util.JsonUtil;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
+import com.github.joekerouac.common.tools.reflect.type.AbstractTypeReference;
+import com.github.joekerouac.common.tools.util.JsonUtil;
 
 /**
  * 异步任务执行器
@@ -188,6 +188,24 @@ public abstract class AbstractAsyncTaskProcessor<T> {
         long[] retryTimeInterval = this.retryTimeInterval;
         return index <= retryTimeInterval.length ? retryTimeInterval[index]
             : retryTimeInterval[retryTimeInterval.length - 1];
+    }
+
+    /**
+     * 是否自动清理执行成功和被取消的任务
+     * 
+     * @return true表示自动清理执行成功和被取消的任务
+     */
+    public boolean autoClear() {
+        return false;
+    }
+
+    /**
+     * 如果{@link #autoClear()}为true则该方法有效，表示保留多少小时内执行完的任务，执行完成后超出该时间的任务将会被清理
+     * 
+     * @return 任务执行完成后的保留时间，单位小时
+     */
+    public int reserve() {
+        return 24 * 3;
     }
 
 }

@@ -33,13 +33,6 @@
       "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel"
     },
     {
-      "name": "async.service.finish-task-reserve",
-      "type": "java.lang.Integer",
-      "description": "任务执行完毕后保留多少个小时，{@link #autoClear}为true时该值有用，为0时表示无需保留； 注意：该值为近似值，不是精确值，可能会有几分钟误差；",
-      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel",
-      "defaultValue": 48
-    },
-    {
       "name": "async.service.load-interval",
       "type": "java.lang.Long",
       "description": "当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒",

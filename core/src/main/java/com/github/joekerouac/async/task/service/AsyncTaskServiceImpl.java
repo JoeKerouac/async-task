@@ -55,6 +55,11 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
      */
     private volatile boolean start = false;
 
+    /**
+     * 任务清理线程
+     */
+    private final TaskClearRunner taskClearRunner;
+
     public AsyncTaskServiceImpl(@NotNull AsyncServiceConfig config) {
         Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Assert.assertTrue(config.getRepository() != null || config.getConnectionSelector() != null,
@@ -91,13 +96,18 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
         this.config = newConfig;
         this.engine = new AsyncTaskProcessorEngine(newConfig);
-        if (config.isAutoClear()) {
-            Thread taskClearThread =
-                new Thread(new TaskClearRunner(config.getRepository(), config.getFinishTaskReserve()),
-                    StringUtils.format("异步任务自动清理线程，清理执行完成超过 [{}] 小时的任务", config.getFinishTaskReserve()));
-            taskClearThread.setDaemon(true);
-            taskClearThread.start();
+        this.taskClearRunner = new TaskClearRunner(config.getRepository());
+        for (AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
+            if (processor.autoClear()) {
+                for (String processorName : processor.processors()) {
+                    taskClearRunner.addClearDesc(processorName, processor.reserve());
+                }
+            }
         }
+        Thread taskClearThread = new Thread(taskClearRunner, "异步任务自动清理线程");
+        taskClearThread.setDaemon(true);
+        taskClearThread.start();
+
     }
 
     @Override
@@ -127,11 +137,20 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     @Override
     public void addProcessor(final AbstractAsyncTaskProcessor<?> processor) {
         engine.addProcessor(processor);
+        if (processor.autoClear()) {
+            for (String processorName : processor.processors()) {
+                taskClearRunner.addClearDesc(processorName, processor.reserve());
+            }
+        }
     }
 
     @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(final String processorName) {
-        return engine.removeProcessor(processorName);
+        P processor = engine.removeProcessor(processorName);
+        if (processor.autoClear()) {
+            taskClearRunner.addClearDesc(processorName, processor.reserve());
+        }
+        return processor;
     }
 
     @Override

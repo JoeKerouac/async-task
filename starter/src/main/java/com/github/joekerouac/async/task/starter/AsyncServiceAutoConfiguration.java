@@ -66,8 +66,6 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         config.setLoadInterval(asyncServiceConfigModel.getLoadInterval());
         config.setMonitorInterval(asyncServiceConfigModel.getMonitorInterval());
         config.setThreadPoolConfig(asyncServiceConfigModel.getThreadPoolConfig());
-        config.setAutoClear(asyncServiceConfigModel.isAutoClear());
-        config.setFinishTaskReserve(asyncServiceConfigModel.getFinishTaskReserve());
         config.setIdGenerator(asyncIdGenerator);
         config.setTransactionHook(transactionHook);
         config.setMonitorService(monitorService);

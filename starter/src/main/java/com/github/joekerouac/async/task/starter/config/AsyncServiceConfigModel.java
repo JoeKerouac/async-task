@@ -16,11 +16,11 @@ import javax.validation.Valid;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
+import com.github.joekerouac.async.task.spi.ConnectionSelector;
 
 import lombok.Data;
 
@@ -69,18 +69,5 @@ public class AsyncServiceConfigModel {
     @NotNull(message = "实际执行任务的线程池配置不能为null")
     @Valid
     private AsyncThreadPoolConfig threadPoolConfig = new AsyncThreadPoolConfig();
-
-    /**
-     * 是否自动清理执行完成并且执行成功的任务（PS：执行失败的任务不会被自动清理）
-     */
-    private boolean autoClear = false;
-
-    /**
-     * 任务执行完毕后保留多少个小时，{@link #autoClear}为true时该值有用，为0时表示无需保留；
-     *
-     * 注意：该值为近似值，不是精确值，可能会有几分钟误差；
-     */
-    @Min(value = 0, message = "任务执行后保留的小时数不能小于0")
-    private int finishTaskReserve = 48;
 
 }
