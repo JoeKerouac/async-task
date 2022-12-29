@@ -12,6 +12,8 @@
  */
 package com.github.joekerouac.async.task.db;
 
+import java.util.function.Supplier;
+
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.service.TransactionSynchronizationManager;
 
@@ -37,6 +39,31 @@ public class TransUtil {
         TransactionSynchronizationManager.setTransStrategy(strategy);
         try {
             task.run();
+        } finally {
+            if (oldTransStrategy != null) {
+                TransactionSynchronizationManager.setTransStrategy(oldTransStrategy);
+            } else {
+                TransactionSynchronizationManager.clearTransStrategy();
+            }
+        }
+    }
+
+    /**
+     * 使用新的事务策略运行一个带有结果的任务
+     * 
+     * @param strategy
+     *            事务策略
+     * @param task
+     *            任务
+     * @param <T>
+     *            任务结果类型
+     * @return 任务结果
+     */
+    public static <T> T run(TransStrategy strategy, Supplier<T> task) {
+        TransStrategy oldTransStrategy = TransactionSynchronizationManager.getTransStrategy();
+        TransactionSynchronizationManager.setTransStrategy(strategy);
+        try {
+            return task.get();
         } finally {
             if (oldTransStrategy != null) {
                 TransactionSynchronizationManager.setTransStrategy(oldTransStrategy);

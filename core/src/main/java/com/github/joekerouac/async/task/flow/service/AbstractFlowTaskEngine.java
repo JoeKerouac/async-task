@@ -12,32 +12,27 @@
  */
 package com.github.joekerouac.async.task.flow.service;
 
-import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
-import com.github.joekerouac.common.tools.exception.DBException;
-import com.github.joekerouac.common.tools.string.StringUtils;
-import com.github.joekerouac.common.tools.util.Assert;
 import com.github.joekerouac.async.task.AsyncTaskService;
+import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.flow.AbstractFlowProcessor;
 import com.github.joekerouac.async.task.flow.enums.FailStrategy;
 import com.github.joekerouac.async.task.flow.enums.StrategyResult;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.TaskNode;
-import com.github.joekerouac.async.task.flow.spi.ExecuteStrategy;
-import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
-import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
-import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
-import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
+import com.github.joekerouac.async.task.flow.spi.*;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
+import com.github.joekerouac.common.tools.string.StringUtils;
+import com.github.joekerouac.common.tools.util.Assert;
 
 import lombok.Builder;
 import lombok.CustomLog;
@@ -117,7 +112,6 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     /**
      * 链接选择器
      */
-    protected final ConnectionSelector connectionSelector;
 
     public AbstractFlowTaskEngine(EngineConfig config) {
         this.processors = config.processors;
@@ -127,7 +121,6 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         this.taskNodeRepository = config.taskNodeRepository;
         this.taskNodeMapRepository = config.taskNodeMapRepository;
         this.executeStrategies = config.executeStrategies;
-        this.connectionSelector = config.connectionSelector;
     }
 
     /**
@@ -428,19 +421,14 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
                     notifyPending(notifyNode, wakeUpNode);
                     break;
                 case RUNNING:
-                    try {
-                        // 注意，这里一定要用事务，因为如果节点状态修改成功，但是异步任务唤醒失败时会导致异步任务永远不会有唤醒的机会了
-                        connectionSelector.runWithTrans(wakeUpNode.getRequestId(), TransStrategy.REQUIRED,
-                            connection -> {
-                                // 将节点状态从wait修改为ready，这里修改失败不用管，可能是当前待唤醒节点已经处理过了
-                                taskNodeRepository.casUpdateStatus(wakeUpNode.getRequestId(), TaskNodeStatus.WAIT,
-                                    TaskNodeStatus.READY);
-                                // 唤醒该子节点，这个对子节点可能并发，不过不影响，唤醒是支持并发的，只会唤醒一次
-                                asyncTaskService.notifyTask(wakeUpNode.getRequestId());
-                            });
-                    } catch (SQLException e) {
-                        throw new DBException(e);
-                    }
+                    // 注意，这里一定要用事务，因为如果节点状态修改成功，但是异步任务唤醒失败时会导致异步任务永远不会有唤醒的机会了
+                    TransUtil.run(TransStrategy.REQUIRED, () -> {
+                        // 将节点状态从wait修改为ready，这里修改失败不用管，可能是当前待唤醒节点已经处理过了
+                        taskNodeRepository.casUpdateStatus(wakeUpNode.getRequestId(), TaskNodeStatus.WAIT,
+                            TaskNodeStatus.READY);
+                        // 唤醒该子节点，这个对子节点可能并发，不过不影响，唤醒是支持并发的，只会唤醒一次
+                        asyncTaskService.notifyTask(wakeUpNode.getRequestId());
+                    });
                     break;
                 default:
                     throw new IllegalStateException(StringUtils.format("不支持的状态： [{}]", result));

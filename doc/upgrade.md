@@ -4,3 +4,4 @@
 # v2.0.0
 - 增加任务执行超时提醒；
 - 监控接口重建；（接口中方法不再有default实现，增加一个`com.github.joekerouac.async.task.impl.MonitorServiceAdaptor`类帮助使用方快速构建监控）
+- 增加任务取消接口；

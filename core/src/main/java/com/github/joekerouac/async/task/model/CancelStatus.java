@@ -15,42 +15,34 @@ package com.github.joekerouac.async.task.model;
 import com.github.joekerouac.common.tools.enums.EnumInterface;
 
 /**
- * 任务执行结束代码，解释任务为什么结束
- * 
+ * 取消状态
+ *
  * @author JoeKerouac
- * @date 2022-10-14 14:37:00
- * @since 1.0.0
+ * @date 2022-12-29 11:15
+ * @since 2.0.0
  */
-public enum TaskFinishCode implements EnumInterface {
+public enum CancelStatus implements EnumInterface {
 
-    NONE("NONE", "当前任务还未执行完成", "NONE"),
+    SUCCESS("SUCCESS", "取消成功", "SUCCESS"),
 
-    SUCCESS("SUCCESS", "执行成功", "SUCCESS"),
+    RUNNING("RUNNING", "任务正在执行中，取消失败", "RUNNING"),
 
-    RETRY_OVERFLOW("RETRY_OVERFLOW", "重试次数耗完仍然没有执行完毕", "RETRY_OVERFLOW"),
+    FINISH("FINISH", "任务已经执行完成，取消失败", "FINISH"),
 
-    NO_PROCESSOR("NO_PROCESSOR", "没有找到对应的执行器", "NO_PROCESSOR"),
-
-    CANNOT_RETRY("CANNOT_RETRY", "没有找到对应的执行器", "CANNOT_RETRY"),
-
-    USER_ERROR("USER_ERROR", "用户处理器返回的结果是ERROR", "USER_ERROR"),
-
-    DESERIALIZATION_ERROR("DESERIALIZATION_ERROR", "任务反序列化异常", "DESERIALIZATION_ERROR"),
-
-    CANCEL("CANCEL", "任务被取消", "CANCEL"),
+    NOT_EXIST("NOT_EXIST", "任务不存在 ，取消失败", "NOT_EXIST"),
 
     ;
 
     static {
         // 重复检测
-        EnumInterface.duplicateCheck(TaskFinishCode.class);
+        EnumInterface.duplicateCheck(ExecResult.class);
     }
 
     private final String code;
     private final String desc;
     private final String englishName;
 
-    TaskFinishCode(String code, String desc, String englishName) {
+    CancelStatus(String code, String desc, String englishName) {
         this.code = code;
         this.desc = desc;
         this.englishName = englishName;

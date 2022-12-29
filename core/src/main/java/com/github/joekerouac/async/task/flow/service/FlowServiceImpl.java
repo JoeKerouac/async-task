@@ -14,35 +14,15 @@ package com.github.joekerouac.async.task.flow.service;
 
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import com.github.joekerouac.common.tools.collection.Pair;
-import com.github.joekerouac.common.tools.collection.CollectionUtil;
-import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
-import com.github.joekerouac.common.tools.db.SqlUtil;
-import com.github.joekerouac.common.tools.exception.DBException;
-import com.github.joekerouac.common.tools.exception.ExceptionUtil;
-import com.github.joekerouac.common.tools.scheduler.SchedulerSystem;
-import com.github.joekerouac.common.tools.scheduler.SchedulerSystemImpl;
-import com.github.joekerouac.common.tools.scheduler.SchedulerTask;
-import com.github.joekerouac.common.tools.scheduler.SimpleSchedulerTask;
-import com.github.joekerouac.common.tools.scheduler.TaskDescriptor;
-import com.github.joekerouac.common.tools.string.StringUtils;
-import com.github.joekerouac.common.tools.thread.NamedThreadFactory;
-import com.github.joekerouac.common.tools.thread.ThreadUtil;
-import com.github.joekerouac.common.tools.util.Assert;
-import com.github.joekerouac.common.tools.util.Starter;
-import com.github.joekerouac.common.tools.thread.ThreadPoolConfig;
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
+import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.exception.ProcessorAlreadyExistException;
 import com.github.joekerouac.async.task.flow.AbstractFlowProcessor;
 import com.github.joekerouac.async.task.flow.FlowService;
@@ -53,14 +33,7 @@ import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.impl.repository.FlowTaskRepositoryImpl;
 import com.github.joekerouac.async.task.flow.impl.repository.TaskNodeMapRepositoryImpl;
 import com.github.joekerouac.async.task.flow.impl.repository.TaskNodeRepositoryImpl;
-import com.github.joekerouac.async.task.flow.model.FlowServiceConfig;
-import com.github.joekerouac.async.task.flow.model.FlowTask;
-import com.github.joekerouac.async.task.flow.model.SetTaskModel;
-import com.github.joekerouac.async.task.flow.model.StreamTaskModel;
-import com.github.joekerouac.async.task.flow.model.FlowTaskModel;
-import com.github.joekerouac.async.task.flow.model.TaskNode;
-import com.github.joekerouac.async.task.flow.model.TaskNodeMap;
-import com.github.joekerouac.async.task.flow.model.TaskNodeModel;
+import com.github.joekerouac.async.task.flow.model.*;
 import com.github.joekerouac.async.task.flow.spi.ExecuteStrategy;
 import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
@@ -70,6 +43,18 @@ import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.TransactionCallback;
 import com.github.joekerouac.async.task.spi.TransactionHook;
+import com.github.joekerouac.common.tools.collection.CollectionUtil;
+import com.github.joekerouac.common.tools.collection.Pair;
+import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
+import com.github.joekerouac.common.tools.db.SqlUtil;
+import com.github.joekerouac.common.tools.exception.ExceptionUtil;
+import com.github.joekerouac.common.tools.scheduler.*;
+import com.github.joekerouac.common.tools.string.StringUtils;
+import com.github.joekerouac.common.tools.thread.NamedThreadFactory;
+import com.github.joekerouac.common.tools.thread.ThreadPoolConfig;
+import com.github.joekerouac.common.tools.thread.ThreadUtil;
+import com.github.joekerouac.common.tools.util.Assert;
+import com.github.joekerouac.common.tools.util.Starter;
 
 import lombok.CustomLog;
 
@@ -92,11 +77,6 @@ public class FlowServiceImpl implements FlowService {
      * ID生成器
      */
     private final IDGenerator idGenerator;
-
-    /**
-     * 链接选择器，注意，与异步任务的要保持一致
-     */
-    private final ConnectionSelector connectionSelector;
 
     /**
      * 事务拦截器，允许为空，为空时可能小概率出现一些问题，例如任务已经执行了，但是添加数据库失败
@@ -164,7 +144,7 @@ public class FlowServiceImpl implements FlowService {
         idGenerator = config.getIdGenerator();
         transactionHook = config.getTransactionHook();
         asyncTaskService = config.getAsyncTaskService();
-        connectionSelector = config.getConnectionSelector();
+        ConnectionSelector connectionSelector = config.getConnectionSelector();
         flowTaskRepository = config.getFlowTaskRepository() == null ? new FlowTaskRepositoryImpl(connectionSelector)
             : config.getFlowTaskRepository();
         taskNodeRepository = config.getTaskNodeRepository() == null ? new TaskNodeRepositoryImpl(connectionSelector)
@@ -355,14 +335,12 @@ public class FlowServiceImpl implements FlowService {
      * @param taskRequestId
      *            流式任务主任务的requestId
      * @return 是否还有更多数据，如果返回true，表示还有数据未处理，需要下次继续处理
-     * @throws Throwable
-     *             异常
      */
-    private boolean buildNodeMap(String taskRequestId) throws Throwable {
+    private boolean buildNodeMap(String taskRequestId) {
         // 单链构建完毕，准备更新到数据库
         AtomicBoolean hasMoreData = new AtomicBoolean(true);
 
-        connectionSelector.runWithTrans(taskRequestId, TransStrategy.REQUIRED, connection -> {
+        TransUtil.run(TransStrategy.REQUIRED, () -> {
             /*
              * 1、锁定主任务
              */
@@ -508,81 +486,76 @@ public class FlowServiceImpl implements FlowService {
 
         task.setLastTaskId(nodes.get(nodes.size() - 1).getRequestId());
 
-        try {
-            connectionSelector.runWithTrans(streamId, TransStrategy.REQUIRED, connection -> {
-                /*
-                 * 1、如果主任务已经存在，那么锁定，否则创建
-                 */
-                // 如果第一个任务ID一致，那么表示
-                boolean createFlow = false;
-                FlowTask taskFromDB = flowTaskRepository.selectForLock(streamId);
-                if (taskFromDB == null) {
-                    try {
-                        flowTaskRepository.save(task);
-                        createFlow = true;
-                    } catch (RuntimeException throwable) {
-                        // 如果是主键冲突，可能是并发了，此时应该忽略异常
-                        Throwable rootCause = ExceptionUtil.getRootCause(throwable);
+        TransUtil.run(TransStrategy.REQUIRED, () -> {
+            /*
+             * 1、如果主任务已经存在，那么锁定，否则创建
+             */
+            // 如果第一个任务ID一致，那么表示
+            boolean createFlow = false;
+            FlowTask taskFromDB = flowTaskRepository.selectForLock(streamId);
+            if (taskFromDB == null) {
+                try {
+                    flowTaskRepository.save(task);
+                    createFlow = true;
+                } catch (RuntimeException throwable) {
+                    // 如果是主键冲突，可能是并发了，此时应该忽略异常
+                    Throwable rootCause = ExceptionUtil.getRootCause(throwable);
 
-                        if (!(rootCause instanceof SQLException)
-                            || !SqlUtil.causeDuplicateKey((SQLException)rootCause)) {
-                            throw throwable;
-                        }
-
-                        // 到这里表明是因为主键冲突导致的异常，肯定是并发创建主任务了，此时肯定是存在主任务了，我们只需要加锁即可；
-                        taskFromDB = flowTaskRepository.selectForLock(streamId);
-                        Assert.notNull(taskFromDB, StringUtils.format("程序未知BUG，当前任务[{}]不存在", streamId),
-                            ExceptionProviderConst.IllegalStateExceptionProvider);
+                    if (!(rootCause instanceof SQLException) || !SqlUtil.causeDuplicateKey((SQLException)rootCause)) {
+                        throw throwable;
                     }
+
+                    // 到这里表明是因为主键冲突导致的异常，肯定是并发创建主任务了，此时肯定是存在主任务了，我们只需要加锁即可；
+                    taskFromDB = flowTaskRepository.selectForLock(streamId);
+                    Assert.notNull(taskFromDB, StringUtils.format("程序未知BUG，当前任务[{}]不存在", streamId),
+                        ExceptionProviderConst.IllegalStateExceptionProvider);
                 }
+            }
 
-                // 默认node构建完是WAIT状态，如果当前没有创建主任务，也就是主任务已经存在了，那么新建任务应该是init状态
-                /*
-                 * 2、开始保存子任务、创建异步任务；此时分两种情况
-                 * - 当前主任务已经存在：此时新建任务应该是init状态，唤醒节点关系构建线程来构建节点关系而不是使用我们构建的节点关系（稍后会有专门的线程做这个事情）；
-                 * - 当前主任务不存在：此时新建任务应该是wait状态，并且第一个任务应该立即唤醒，需要我们保存我们的节点关系；
-                 */
-                if (createFlow) {
-                    // 有可能第一次添加仅仅添加了一个节点，所以此时没有node map，也不应该保存
-                    if (pair.getValue().size() > 0) {
-                        // 创建了主任务，那么也应该把任务节点关系构建出来
-                        taskNodeMapRepository.save(pair.getValue());
-                    }
-                } else {
-                    // 没有创建主任务，节点状态应该是init
-                    for (final TaskNode node : nodes) {
-                        node.setStatus(TaskNodeStatus.INIT);
-                    }
+            // 默认node构建完是WAIT状态，如果当前没有创建主任务，也就是主任务已经存在了，那么新建任务应该是init状态
+            /*
+             * 2、开始保存子任务、创建异步任务；此时分两种情况
+             * - 当前主任务已经存在：此时新建任务应该是init状态，唤醒节点关系构建线程来构建节点关系而不是使用我们构建的节点关系（稍后会有专门的线程做这个事情）；
+             * - 当前主任务不存在：此时新建任务应该是wait状态，并且第一个任务应该立即唤醒，需要我们保存我们的节点关系；
+             */
+            if (createFlow) {
+                // 有可能第一次添加仅仅添加了一个节点，所以此时没有node map，也不应该保存
+                if (pair.getValue().size() > 0) {
+                    // 创建了主任务，那么也应该把任务节点关系构建出来
+                    taskNodeMapRepository.save(pair.getValue());
                 }
-
-                // 保存任务节点
-                taskNodeRepository.save(nodes);
-
+            } else {
+                // 没有创建主任务，节点状态应该是init
                 for (final TaskNode node : nodes) {
-                    asyncTaskService.addTaskWithWait(node.getRequestId(), node.getRequestId(), node.getMaxRetry(),
-                        LocalDateTime.now(), StreamTaskEngine.PROCESSOR_NAME, TransStrategy.SUPPORTS);
+                    node.setStatus(TaskNodeStatus.INIT);
                 }
+            }
 
-                if (createFlow) {
-                    taskNodeRepository.updateStatus(firstTask.getRequestId(), TaskNodeStatus.READY);
-                    asyncTaskService.notifyTask(firstTask.getRequestId());
+            // 保存任务节点
+            taskNodeRepository.save(nodes);
+
+            for (final TaskNode node : nodes) {
+                asyncTaskService.addTaskWithWait(node.getRequestId(), node.getRequestId(), node.getMaxRetry(),
+                    LocalDateTime.now(), StreamTaskEngine.PROCESSOR_NAME, TransStrategy.SUPPORTS);
+            }
+
+            if (createFlow) {
+                taskNodeRepository.updateStatus(firstTask.getRequestId(), TaskNodeStatus.READY);
+                asyncTaskService.notifyTask(firstTask.getRequestId());
+            }
+        });
+
+        if (transactionHook != null && transactionHook.isActualTransactionActive()) {
+            transactionHook.registerCallback(new TransactionCallback() {
+                @Override
+                public void afterCommit() throws RuntimeException {
+                    registerStreamTaskBuildTask(streamId);
+                    schedulerSystem.scheduler(streamId, false);
                 }
             });
-
-            if (transactionHook != null && transactionHook.isActualTransactionActive()) {
-                transactionHook.registerCallback(new TransactionCallback() {
-                    @Override
-                    public void afterCommit() throws RuntimeException {
-                        registerStreamTaskBuildTask(streamId);
-                        schedulerSystem.scheduler(streamId, false);
-                    }
-                });
-            } else {
-                registerStreamTaskBuildTask(streamId);
-                schedulerSystem.scheduler(streamId, false);
-            }
-        } catch (SQLException e) {
-            throw new DBException("任务添加失败", e);
+        } else {
+            registerStreamTaskBuildTask(streamId);
+            schedulerSystem.scheduler(streamId, false);
         }
     }
 
@@ -609,29 +582,25 @@ public class FlowServiceImpl implements FlowService {
                 new Pair<>(new ArrayList<>(), new ArrayList<>()), new HashSet<>(), new HashSet<>());
 
         // 开启事务
-        try {
-            connectionSelector.runWithTrans(flowRequestId, TransStrategy.REQUIRED, connection -> {
-                flowTaskRepository.save(flowTask);
-                // 将第一个节点直接设置为ready状态，这里虽然是遍历，但是一般第一个就是第一个节点，这里只是做了兜底，防止后续开发过程中不小心更改了顺序，导致list中的第一个不是真正的第一个执行节点
-                for (final TaskNode taskNode : pair.getKey()) {
-                    if (taskNode.getRequestId().equals(taskModel.getFirstTask().getRequestId())) {
-                        taskNode.setStatus(TaskNodeStatus.READY);
-                    }
+        TransUtil.run(TransStrategy.REQUIRED, () -> {
+            flowTaskRepository.save(flowTask);
+            // 将第一个节点直接设置为ready状态，这里虽然是遍历，但是一般第一个就是第一个节点，这里只是做了兜底，防止后续开发过程中不小心更改了顺序，导致list中的第一个不是真正的第一个执行节点
+            for (final TaskNode taskNode : pair.getKey()) {
+                if (taskNode.getRequestId().equals(taskModel.getFirstTask().getRequestId())) {
+                    taskNode.setStatus(TaskNodeStatus.READY);
                 }
+            }
 
-                taskNodeRepository.save(pair.getKey());
-                taskNodeMapRepository.save(pair.getValue());
-                for (final TaskNode node : pair.getKey()) {
-                    asyncTaskService.addTaskWithWait(node.getRequestId(), node.getRequestId(), node.getMaxRetry(),
-                        LocalDateTime.now(), SetTaskEngine.PROCESSOR_NAME, TransStrategy.SUPPORTS);
-                }
+            taskNodeRepository.save(pair.getKey());
+            taskNodeMapRepository.save(pair.getValue());
+            for (final TaskNode node : pair.getKey()) {
+                asyncTaskService.addTaskWithWait(node.getRequestId(), node.getRequestId(), node.getMaxRetry(),
+                    LocalDateTime.now(), SetTaskEngine.PROCESSOR_NAME, TransStrategy.SUPPORTS);
+            }
 
-                // 唤醒第一个任务，开始执行
-                asyncTaskService.notifyTask(flowTask.getFirstTaskId());
-            });
-        } catch (SQLException e) {
-            throw new DBException("任务添加失败", e);
-        }
+            // 唤醒第一个任务，开始执行
+            asyncTaskService.notifyTask(flowTask.getFirstTaskId());
+        });
     }
 
     /**

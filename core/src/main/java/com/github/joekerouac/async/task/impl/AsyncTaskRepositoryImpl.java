@@ -55,6 +55,10 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     private static final String SQL_CAS_UPDATE =
         "update {} set `status` = ?, `exec_ip` = ?, `gmt_update_time` = ? where `request_id` = ? and `status` = ?";
 
+    private static final String SQL_CAS_CANCEL =
+        "update {} set `status` = \"" + ExecStatus.FINISH + "\", `task_finish_code` = \"" + TaskFinishCode.CANCEL.code()
+            + "\", `exec_ip` = ?, `gmt_update_time` = ? where `request_id` = ? and `status` = ?";
+
     private static final String SQL_UPDATE = "update {} set {setTemp}, `gmt_update_time` = ? where `request_id` = ?";
 
     private static final String SQL_SELECT_PAGE =
@@ -118,6 +122,12 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     public int casUpdate(final String requestId, final ExecStatus before, final ExecStatus after, final String ip) {
         return runSql(requestId, SQL_CAS_UPDATE, PreparedStatement::executeUpdate, after, ip, LocalDateTime.now(),
             requestId, before);
+    }
+
+    @Override
+    public int casCancel(String requestId, ExecStatus before, String ip) {
+        return runSql(requestId, SQL_CAS_CANCEL, PreparedStatement::executeUpdate, ip, LocalDateTime.now(), requestId,
+            before);
     }
 
     @Override

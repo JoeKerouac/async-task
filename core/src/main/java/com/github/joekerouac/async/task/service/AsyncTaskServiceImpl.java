@@ -24,10 +24,7 @@ import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
-import com.github.joekerouac.async.task.model.AsyncServiceConfig;
-import com.github.joekerouac.async.task.model.ExecStatus;
-import com.github.joekerouac.async.task.model.TaskFinishCode;
-import com.github.joekerouac.async.task.model.TransStrategy;
+import com.github.joekerouac.async.task.model.*;
 import com.github.joekerouac.async.task.spi.*;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
@@ -166,6 +163,32 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
                 }
             });
         }
+    }
+
+    @Override
+    public CancelStatus cancelTask(String requestId, TransStrategy transStrategy) {
+        Assert.assertTrue(start, "当前服务还未启动，请先启动后调用", ExceptionProviderConst.IllegalStateExceptionProvider);
+
+        return TransUtil.run(transStrategy, () -> {
+            while (true) {
+                AsyncTask task = config.getRepository().selectByRequestId(requestId);
+                if (task != null) {
+                    if (task.getStatus() == ExecStatus.RUNNING) {
+                        return CancelStatus.RUNNING;
+                    } else if (task.getStatus() == ExecStatus.FINISH) {
+                        return CancelStatus.FINISH;
+                    } else {
+                        // cas取消成功就返回，否则继续循环
+                        if (config.getRepository().casCancel(requestId, task.getStatus(), Const.IP) > 0) {
+                            return CancelStatus.SUCCESS;
+                        }
+                    }
+                } else {
+                    return CancelStatus.NOT_EXIST;
+                }
+            }
+
+        });
     }
 
     private void addTaskInternal(final String requestId, final Object task, final int maxRetry,

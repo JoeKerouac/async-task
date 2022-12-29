@@ -19,6 +19,7 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
+import com.github.joekerouac.async.task.model.CancelStatus;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
@@ -173,5 +174,27 @@ public interface AsyncTaskService {
      *            事务策略
      */
     void notifyTask(String requestId, TransStrategy transStrategy);
+
+    /**
+     * 取消任务
+     * 
+     * @param requestId
+     *            要取消的任务requestId
+     * @return 取消结果
+     */
+    default CancelStatus cancelTask(String requestId) {
+        return cancelTask(requestId, TransStrategy.SUPPORTS);
+    }
+
+    /**
+     * 取消任务
+     *
+     * @param requestId
+     *            要取消的任务requestId
+     * @param transStrategy
+     *            事务策略
+     * @return 取消结果
+     */
+    CancelStatus cancelTask(String requestId, TransStrategy transStrategy);
 
 }
