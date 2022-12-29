@@ -26,6 +26,7 @@ import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
 import com.github.joekerouac.async.task.model.*;
 import com.github.joekerouac.async.task.spi.*;
+import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
@@ -97,10 +98,12 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         this.config = newConfig;
         this.engine = new AsyncTaskProcessorEngine(newConfig);
         this.taskClearRunner = new TaskClearRunner(config.getRepository());
-        for (AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
-            if (processor.autoClear()) {
-                for (String processorName : processor.processors()) {
-                    taskClearRunner.addClearDesc(processorName, processor.reserve());
+        if (CollectionUtil.isNotEmpty(config.getProcessors())) {
+            for (AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
+                if (processor.autoClear()) {
+                    for (String processorName : processor.processors()) {
+                        taskClearRunner.addClearDesc(processorName, processor.reserve());
+                    }
                 }
             }
         }
