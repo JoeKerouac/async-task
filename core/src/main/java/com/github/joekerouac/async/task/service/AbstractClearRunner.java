@@ -45,9 +45,14 @@ public abstract class AbstractClearRunner implements Runnable {
         while (start) {
             try {
                 clear();
-                Thread.sleep(EXEC_INTERVAL);
             } catch (Throwable throwable) {
                 LOGGER.warn(throwable, "任务清理线程执行过程中出错，稍后将会重试");
+            }
+
+            try {
+                Thread.sleep(EXEC_INTERVAL);
+            } catch (InterruptedException e) {
+                // 忽略该异常
             }
         }
     }

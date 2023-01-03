@@ -65,8 +65,8 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
         "select * from {} where `status` = ? and `exec_time` <= ? {exclude} order by `exec_time` desc limit ? offset ?";
 
     private static final String SQL_SELECT_FINISH_PAGE =
-        "select * from {} where `processor` = ? and `task_finish_code` = ? and `status` = 'FINISH' and `exec_time` <= ? "
-            + "order by `exec_time` asc limit ? offset ?";
+        "select * from {} where `processor` = ? and `task_finish_code` = ? and `status` = 'FINISH' and `exec_time` <= ?"
+            + " order by `exec_time` asc limit ? offset ?";
 
     private static final String SQL_DELETE = "delete from {} where `request_id` in (" + PLACEHOLDER + ")";
 
