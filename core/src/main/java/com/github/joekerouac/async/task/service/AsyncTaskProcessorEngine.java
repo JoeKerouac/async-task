@@ -29,6 +29,7 @@ import com.github.joekerouac.async.task.model.*;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.MonitorService;
+import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.collection.Pair;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
@@ -105,8 +106,14 @@ class AsyncTaskProcessorEngine {
      */
     private final Map<String, AbstractAsyncTaskProcessor<?>> processors;
 
-    public AsyncTaskProcessorEngine(AsyncServiceConfig config) {
+    private final TaskClearRunner taskClearRunner;
+
+    private final ProcessorSupplier processorSupplier;
+
+    public AsyncTaskProcessorEngine(AsyncServiceConfig config, TaskClearRunner taskClearRunner) {
         this.config = config;
+        this.processorSupplier = config.getProcessorSupplier();
+        this.taskClearRunner = taskClearRunner;
         processors = new ConcurrentHashMap<>();
 
         // 队列中按照时间从小到大排序
@@ -136,6 +143,10 @@ class AsyncTaskProcessorEngine {
             StringUtils.format("处理器可以处理的任务类型不能为空， [{}]", processor),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
         for (final String name : processor.processors()) {
+            if (processor.autoClear()) {
+                taskClearRunner.addClearDesc(name, processor.reserve());
+            }
+
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("注册处理器 [{}:{}]", name, processor);
             }
@@ -156,7 +167,12 @@ class AsyncTaskProcessorEngine {
      */
     @SuppressWarnings("unchecked")
     public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(String processorName) {
-        return (P)processors.remove(processorName);
+        P processor = (P)processors.remove(processorName);
+        if (processor != null && processor.autoClear()) {
+            taskClearRunner.removeClearDesc(processorName);
+        }
+
+        return processor;
     }
 
     /**
@@ -168,7 +184,20 @@ class AsyncTaskProcessorEngine {
      */
     @SuppressWarnings("unchecked")
     public <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String processorName) {
-        return (P)processors.get(processorName);
+        P processor = (P)processors.get(processorName);
+        if (processor == null && processorSupplier != null) {
+            synchronized (processorSupplier) {
+                processor = (P)processors.get(processorName);
+                if (processor == null) {
+                    processor = processorSupplier.get(processorName);
+                    if (processor != null) {
+                        addProcessor(processor);
+                    }
+                }
+            }
+        }
+
+        return processor;
     }
 
     /**
@@ -387,9 +416,7 @@ class AsyncTaskProcessorEngine {
         }
 
         // 查找任务处理器
-        @SuppressWarnings("unchecked")
-        AbstractAsyncTaskProcessor<Object> processor =
-            (AbstractAsyncTaskProcessor<Object>)processors.get(task.getProcessor());
+        AbstractAsyncTaskProcessor<Object> processor = getProcessor(task.getProcessor());
 
         String requestId = task.getRequestId();
         if (processor == null) {

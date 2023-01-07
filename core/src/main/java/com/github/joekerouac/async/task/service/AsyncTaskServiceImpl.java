@@ -26,8 +26,8 @@ import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
 import com.github.joekerouac.async.task.model.*;
 import com.github.joekerouac.async.task.spi.*;
-import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
+import com.github.joekerouac.common.tools.reflect.bean.BeanUtils;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
 
@@ -56,11 +56,6 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
      */
     private volatile boolean start = false;
 
-    /**
-     * 任务清理线程
-     */
-    private final TaskClearRunner taskClearRunner;
-
     public AsyncTaskServiceImpl(@NotNull AsyncServiceConfig config) {
         Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Assert.assertTrue(config.getRepository() != null || config.getConnectionSelector() != null,
@@ -82,35 +77,17 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         // 这里构建出仓储服务
         AsyncTaskRepository repository = config.getRepository();
         repository = repository != null ? repository : new AsyncTaskRepositoryImpl(config.getConnectionSelector());
-        AsyncServiceConfig newConfig = new AsyncServiceConfig();
+        AsyncServiceConfig newConfig = BeanUtils.copyFromObjToObj(new AsyncServiceConfig(), config);
         newConfig.setRepository(repository);
-        newConfig.setConnectionSelector(config.getConnectionSelector());
-        newConfig.setCacheQueueSize(config.getCacheQueueSize());
-        newConfig.setLoadThreshold(config.getLoadThreshold());
-        newConfig.setLoadInterval(config.getLoadInterval());
-        newConfig.setMonitorInterval(config.getMonitorInterval());
-        newConfig.setThreadPoolConfig(config.getThreadPoolConfig());
-        newConfig.setIdGenerator(config.getIdGenerator());
-        newConfig.setProcessors(config.getProcessors());
-        newConfig.setTransactionHook(config.getTransactionHook());
         newConfig.setMonitorService(monitorService);
 
         this.config = newConfig;
-        this.engine = new AsyncTaskProcessorEngine(newConfig);
-        this.taskClearRunner = new TaskClearRunner(config.getRepository());
-        if (CollectionUtil.isNotEmpty(config.getProcessors())) {
-            for (AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
-                if (processor.autoClear()) {
-                    for (String processorName : processor.processors()) {
-                        taskClearRunner.addClearDesc(processorName, processor.reserve());
-                    }
-                }
-            }
-        }
+        TaskClearRunner taskClearRunner = new TaskClearRunner(repository);
+        this.engine = new AsyncTaskProcessorEngine(newConfig, taskClearRunner);
         Thread taskClearThread = new Thread(taskClearRunner, "异步任务自动清理线程");
+        taskClearThread.setPriority(Thread.MIN_PRIORITY);
         taskClearThread.setDaemon(true);
         taskClearThread.start();
-
     }
 
     @Override
@@ -140,20 +117,11 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     @Override
     public void addProcessor(final AbstractAsyncTaskProcessor<?> processor) {
         engine.addProcessor(processor);
-        if (processor.autoClear()) {
-            for (String processorName : processor.processors()) {
-                taskClearRunner.addClearDesc(processorName, processor.reserve());
-            }
-        }
     }
 
     @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(final String processorName) {
-        P processor = engine.removeProcessor(processorName);
-        if (processor.autoClear()) {
-            taskClearRunner.addClearDesc(processorName, processor.reserve());
-        }
-        return processor;
+        return engine.removeProcessor(processorName);
     }
 
     @Override

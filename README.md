@@ -276,6 +276,8 @@ public class TestTask {
 
 > 注意，这里的泛型TestTask就是我们上边声明的任务TestTask类型；
 
+> 注意，processor类的命名方式请尽可能的遵守processor name + Processor这种格式，例如我们这里示例processor name是TestTask，所以我们的processor类就叫TestTaskProcessor
+
 ```java
 
 import com.github.joekerouac.async.task.model.ExecResult;

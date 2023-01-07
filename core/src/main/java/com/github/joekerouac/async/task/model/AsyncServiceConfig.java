@@ -98,4 +98,9 @@ public class AsyncServiceConfig {
      */
     private MonitorService monitorService;
 
+    /**
+     * 任务处理器提供者，优先使用静态任务处理器，静态任务处理器不存在时尝试使用从该处理器提供者获取
+     */
+    private ProcessorSupplier processorSupplier;
+
 }

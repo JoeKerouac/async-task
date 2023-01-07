@@ -29,7 +29,6 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotationMetadata;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
 
@@ -40,7 +39,6 @@ import com.github.joekerouac.async.task.starter.annotations.AsyncTaskProcessor;
  * @date 2022-10-14 14:37:00
  * @since 1.0.0
  */
-@Component
 public class AsyncTaskProcessorAutoScanner implements ImportBeanDefinitionRegistrar, EnvironmentAware {
 
     private Environment environment;

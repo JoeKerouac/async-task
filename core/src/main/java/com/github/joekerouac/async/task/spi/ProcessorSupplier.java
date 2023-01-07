@@ -10,28 +10,26 @@
  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
-package com.github.joekerouac.async.task.starter.annotations;
-
-import java.lang.annotation.*;
-
-import org.springframework.context.annotation.Import;
-
-import com.github.joekerouac.async.task.starter.AsyncServiceAutoConfiguration;
-import com.github.joekerouac.async.task.starter.AsyncTaskProcessorAutoScanner;
-import com.github.joekerouac.async.task.starter.ProcessorBeanDefinitionPostProcessor;
+package com.github.joekerouac.async.task.spi;
 
 /**
- * 允许异步任务服务
- * 
+ * 处理器提供者，异步任务系统优先使用静态添加的processor，如果没有，则使用该提供器提供的processor，并将其加入静态processor列表
+ *
  * @author JoeKerouac
- * @date 2022-10-14 14:37:00
+ * @date 2023-01-06 11:28
  * @since 1.0.0
  */
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Target(ElementType.TYPE)
-@Import({AsyncServiceAutoConfiguration.class, AsyncTaskProcessorAutoScanner.class,
-    ProcessorBeanDefinitionPostProcessor.class})
-public @interface EnableAsyncTask {
+public interface ProcessorSupplier {
+
+    /**
+     * 获取一个processor
+     * 
+     * @param processorName
+     *            处理器名
+     * @param <T>
+     *            任务实际类型
+     * @return processor
+     */
+    <T, P extends AbstractAsyncTaskProcessor<T>> P get(String processorName);
 
 }
