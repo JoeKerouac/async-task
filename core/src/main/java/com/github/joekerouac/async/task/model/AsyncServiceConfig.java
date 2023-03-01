@@ -103,4 +103,9 @@ public class AsyncServiceConfig {
      */
     private ProcessorSupplier processorSupplier;
 
+    /**
+     * trace服务，允许为空
+     */
+    private TraceService traceService;
+
 }

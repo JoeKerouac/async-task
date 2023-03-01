@@ -10,3 +10,6 @@
 # v2.0.1
 - 优化processor添加流程，spring场景下尽可能的延迟processor创建；
 - 修复2.0.0引入的BUG，调用`com.github.joekerouac.async.task.AsyncTaskService.addProcessor`将会导致processor强制加入自动清理的任务中，而不会判断processor需不需要自动清理；
+
+# v2.0.2
+- 支持trace

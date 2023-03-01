@@ -21,6 +21,7 @@ import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.entity.AsyncTask;
+import com.github.joekerouac.async.task.entity.common.ExtMap;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
@@ -56,6 +57,8 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
      */
     private volatile boolean start = false;
 
+    private final TraceService traceService;
+
     public AsyncTaskServiceImpl(@NotNull AsyncServiceConfig config) {
         Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Assert.assertTrue(config.getRepository() != null || config.getConnectionSelector() != null,
@@ -88,6 +91,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         taskClearThread.setPriority(Thread.MIN_PRIORITY);
         taskClearThread.setDaemon(true);
         taskClearThread.start();
+        this.traceService = config.getTraceService();
     }
 
     @Override
@@ -209,6 +213,18 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         asyncTask.setTaskFinishCode(TaskFinishCode.NONE);
         asyncTask.setCreateIp(Const.IP);
         asyncTask.setExecIp(Const.IP);
+        if (traceService != null) {
+            String traceContext = traceService.dump();
+            if (traceContext != null) {
+                ExtMap<String, Object> extMap = asyncTask.getExtMap();
+                if (extMap == null) {
+                    extMap = new ExtMap<>();
+                    asyncTask.setExtMap(extMap);
+                }
+
+                extMap.put(AsyncTask.ExtMapKey.TRACE_CONTEXT, traceContext);
+            }
+        }
 
         TransUtil.run(transStrategy, () -> {
             if (repository.save(asyncTask)) {

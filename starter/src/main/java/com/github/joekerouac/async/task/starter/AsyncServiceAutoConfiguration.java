@@ -60,7 +60,8 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
     public AsyncTaskService asyncTaskService(@Autowired AsyncServiceConfigModel asyncServiceConfigModel,
         @Autowired AsyncTaskRepository asyncTaskRepository, @Autowired IDGenerator asyncIdGenerator,
         @Autowired(required = false) TransactionHook transactionHook,
-        @Autowired(required = false) MonitorService monitorService) {
+        @Autowired(required = false) MonitorService monitorService,
+        @Autowired(required = false) TraceService traceService) {
         LOGGER.debug("当前异步任务服务配置详情为： [{}:{}:{}:{}:{}]", asyncServiceConfigModel, asyncTaskRepository, asyncIdGenerator,
             transactionHook, monitorService);
 
@@ -165,6 +166,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         config.setTransactionHook(transactionHook);
         config.setMonitorService(monitorService);
         config.setProcessorSupplier(supplier);
+        config.setTraceService(traceService);
 
         return new AsyncTaskServiceImpl(config);
     }

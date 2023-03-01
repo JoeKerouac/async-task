@@ -26,10 +26,7 @@ import java.util.stream.Collectors;
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.*;
-import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
-import com.github.joekerouac.async.task.spi.MonitorService;
-import com.github.joekerouac.async.task.spi.ProcessorSupplier;
+import com.github.joekerouac.async.task.spi.*;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.collection.Pair;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
@@ -110,10 +107,19 @@ class AsyncTaskProcessorEngine {
 
     private final ProcessorSupplier processorSupplier;
 
+    private final TraceService traceService;
+
+    private final AsyncTaskRepository repository;
+
+    private final MonitorService monitorService;
+
     public AsyncTaskProcessorEngine(AsyncServiceConfig config, TaskClearRunner taskClearRunner) {
         this.config = config;
         this.processorSupplier = config.getProcessorSupplier();
         this.taskClearRunner = taskClearRunner;
+        this.traceService = config.getTraceService();
+        this.repository = config.getRepository();
+        this.monitorService = config.getMonitorService();
         processors = new ConcurrentHashMap<>();
 
         // 队列中按照时间从小到大排序
@@ -246,7 +252,6 @@ class AsyncTaskProcessorEngine {
     public synchronized void start() {
         LOGGER.info("异步任务引擎准备启动...");
         start = true;
-        AsyncTaskRepository repository = config.getRepository();
 
         // 捞取异步任务的任务，注意：如果具体上次捞取为空时间没有到捞取时间时，不应该触发任务调度
         loadTask = new SimpleSchedulerTask(() -> {
@@ -293,14 +298,13 @@ class AsyncTaskProcessorEngine {
             while (start) {
                 try {
                     Thread.sleep(config.getMonitorInterval());
-                    LockTaskUtil.runWithLock(queueLock.readLock(),
-                        () -> config.getMonitorService().monitor(queue.size()));
+                    LockTaskUtil.runWithLock(queueLock.readLock(), () -> monitorService.monitor(queue.size()));
 
                     // 统计在指定时间之前就开始执行的任务
                     LocalDateTime execTime = LocalDateTime.now().plus(-config.getExecTimeout(), ChronoUnit.MILLIS);
                     List<AsyncTask> tasks = repository.stat(execTime);
                     if (!tasks.isEmpty()) {
-                        config.getMonitorService().taskExecTimeout(tasks, config.getExecTimeout());
+                        monitorService.taskExecTimeout(tasks, config.getExecTimeout());
                     }
                 } catch (Throwable throwable) {
                     if (!(throwable instanceof InterruptedException)) {
@@ -332,7 +336,6 @@ class AsyncTaskProcessorEngine {
                             LOGGER.debug("异步任务工作线程收到中断消息，忽略该消息");
                         }
                     } catch (Throwable throwable) {
-                        MonitorService monitorService = config.getMonitorService();
                         monitorService.uncaughtException(currentThread, throwable);
                     }
                 }
@@ -363,42 +366,27 @@ class AsyncTaskProcessorEngine {
 
     /**
      * 任务执行调度方法，每次调用都会从队列中获取一个当前可以执行的任务然后执行
-     * 
+     *
      * @throws InterruptedException
      *             中断异常
      */
     private void scheduler() throws InterruptedException {
-        AsyncTaskRepository repository = config.getRepository();
-        MonitorService monitorService = config.getMonitorService();
-        String taskRequestId = take();
-
-        if (taskRequestId == null) {
-            LOGGER.info("系统关闭，停止调度");
+        AsyncTask task = take();
+        if (task == null) {
             return;
         }
 
-        AsyncTask task;
-        // 锁定任务，使用CAS更新的形式来完成
-        int casUpdateResult = repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP);
-        while (casUpdateResult <= 0) {
-            // 如果CAS更新失败，则从数据库刷新任务，看任务是否已经不一致了
-            task = repository.selectByRequestId(taskRequestId);
-            ExecStatus status = task.getStatus();
+        runTask(task);
+    }
 
-            // 如果任务已经不是READY状态，那么就无需处理了
-            if (status != ExecStatus.READY) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("任务 [{}] 已经在其他机器处理了，无需重复处理", task);
-                }
-                return;
-            }
-
-            // 继续尝试CAS，一般来说走不到这里，因为上边CAS更新失败应该是任务状态已经变更或者有其他并发线程/进程已经将该任务状态更新了
-            casUpdateResult = repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP);
-        }
-
-        // 任务锁定后从数据库刷新任务状态，因为内存中的可能已经不对了
-        task = repository.selectByRequestId(taskRequestId);
+    /**
+     * 执行任务
+     * 
+     * @param task
+     *            要执行的任务
+     */
+    private void runTask(AsyncTask task) {
+        String taskRequestId = task.getRequestId();
 
         // 如果此时任务还不能执行，则将任务重新加到队列中
         LocalDateTime now = LocalDateTime.now();
@@ -443,6 +431,13 @@ class AsyncTaskProcessorEngine {
         // 调用处理器处理
         ExecResult result;
         Throwable throwable = null;
+
+        String traceContext = Optional.ofNullable(task.getExtMap())
+            .map(map -> (String)map.get(AsyncTask.ExtMapKey.TRACE_CONTEXT)).orElse(null);
+        if (traceService != null && traceContext != null) {
+            traceService.resume(task.getRetry(), traceContext);
+        }
+
         try {
             result = processor.process(requestId, context, cache);
             result = result == null ? ExecResult.SUCCESS : result;
@@ -451,57 +446,71 @@ class AsyncTaskProcessorEngine {
             throwable = e;
         }
 
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(throwable, "任务执行结果：[{}:{}:{}]", requestId, result, context);
+        // 是否还需要retry
+        boolean retry = false;
+
+        try {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug(throwable, "任务执行结果：[{}:{}:{}]", requestId, result, context);
+            }
+
+            switch (result) {
+                case SUCCESS:
+                    finishTask(repository, processor, requestId, context, TaskFinishCode.SUCCESS, null, cache);
+                    break;
+                case WAIT:
+                    retry = true;
+                    repository.update(requestId, ExecStatus.WAIT, null, null, null, Const.IP);
+                    break;
+                case RETRY:
+                    int retryCount = task.getRetry() + 1;
+                    int maxRetry = task.getMaxRetry();
+                    // 重试次数是否超限
+                    boolean retryOverflow = retryCount > maxRetry;
+                    if (retryOverflow
+                        || (throwable != null && !processor.canRetry(requestId, context, throwable, cache))) {
+                        if (LOGGER.isDebugEnabled()) {
+                            LOGGER.debug(throwable, "任务不可重试, [{}:{}:{}]", requestId, retryOverflow, context);
+                        }
+                        // 不可重试
+                        TaskFinishCode code =
+                            retryOverflow ? TaskFinishCode.RETRY_OVERFLOW : TaskFinishCode.CANNOT_RETRY;
+                        monitorService.processError(requestId, code, context, processor, throwable);
+                        finishTask(repository, processor, requestId, context, code, throwable, cache);
+                    } else {
+                        // 可以重试
+                        retry = true;
+                        long interval = processor.nextExecTimeInterval(requestId, retryCount, context, cache);
+                        interval = Math.max(interval, 0);
+                        LocalDateTime nextExecTime = LocalDateTime.now().plus(interval, ChronoUnit.MILLIS);
+
+                        // 更新重试次数和下次执行时间，注意把状态修改为READY状态
+                        task.setStatus(ExecStatus.READY);
+                        task.setExecTime(nextExecTime);
+                        task.setRetry(retryCount);
+
+                        if (LOGGER.isDebugEnabled()) {
+                            LOGGER.debug(throwable, "任务重试, [{}:{}:{}]", requestId, nextExecTime, context);
+                        }
+                        monitorService.processRetry(requestId, context, processor, throwable, nextExecTime);
+                        // 任务重新加到内存队列中
+                        repository.update(taskRequestId, ExecStatus.READY, null, nextExecTime, retryCount, Const.IP);
+                        // 注意，加入队列一定要等到update成功后再加，不然执行时间可能会出错
+                        addTask(Collections.singletonList(task));
+                    }
+                    break;
+                case ERROR:
+                    finishTask(repository, processor, requestId, context, TaskFinishCode.USER_ERROR, null, cache);
+                    break;
+                default:
+                    throw new IllegalStateException(StringUtils.format("不支持的结果状态： [{}]", result));
+            }
+        } finally {
+            if (traceService != null && traceContext != null) {
+                traceService.finish(retry, result, throwable);
+            }
         }
 
-        switch (result) {
-            case SUCCESS:
-                finishTask(repository, processor, requestId, context, TaskFinishCode.SUCCESS, null, cache);
-                break;
-            case WAIT:
-                repository.update(requestId, ExecStatus.WAIT, null, null, null, Const.IP);
-                break;
-            case RETRY:
-                int retry = task.getRetry() + 1;
-                int maxRetry = task.getMaxRetry();
-                // 重试次数是否超限
-                boolean retryOverflow = retry > maxRetry;
-                if (retryOverflow || (throwable != null && !processor.canRetry(requestId, context, throwable, cache))) {
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug(throwable, "任务不可重试, [{}:{}:{}]", requestId, retryOverflow, context);
-                    }
-                    // 不可重试
-                    TaskFinishCode code = retryOverflow ? TaskFinishCode.RETRY_OVERFLOW : TaskFinishCode.CANNOT_RETRY;
-                    monitorService.processError(requestId, code, context, processor, throwable);
-                    finishTask(repository, processor, requestId, context, code, throwable, cache);
-                } else {
-                    // 可以重试
-                    long interval = processor.nextExecTimeInterval(requestId, retry, context, cache);
-                    interval = Math.max(interval, 0);
-                    LocalDateTime nextExecTime = LocalDateTime.now().plus(interval, ChronoUnit.MILLIS);
-
-                    // 更新重试次数和下次执行时间，注意把状态修改为READY状态
-                    task.setStatus(ExecStatus.READY);
-                    task.setExecTime(nextExecTime);
-                    task.setRetry(retry);
-
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug(throwable, "任务重试, [{}:{}:{}]", requestId, nextExecTime, context);
-                    }
-                    monitorService.processRetry(requestId, context, processor, throwable, nextExecTime);
-                    // 任务重新加到内存队列中
-                    repository.update(taskRequestId, ExecStatus.READY, null, nextExecTime, retry, Const.IP);
-                    // 注意，加入队列一定要等到update成功后再加，不然执行时间可能会出错
-                    addTask(Collections.singletonList(task));
-                }
-                break;
-            case ERROR:
-                finishTask(repository, processor, requestId, context, TaskFinishCode.USER_ERROR, null, cache);
-                break;
-            default:
-                throw new IllegalStateException(StringUtils.format("不支持的结果状态： [{}]", result));
-        }
     }
 
     /**
@@ -532,11 +541,49 @@ class AsyncTaskProcessorEngine {
     }
 
     /**
+     * 获取并锁定一个任务
+     *
+     * @return 任务，可能为空
+     */
+    private AsyncTask take() {
+        String taskRequestId = takeFromMemory();
+
+        if (taskRequestId == null) {
+            LOGGER.info("系统关闭，停止调度");
+            return null;
+        }
+
+        AsyncTask task;
+        // 锁定任务，使用CAS更新的形式来完成
+        int casUpdateResult = repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP);
+        while (casUpdateResult <= 0) {
+            // 如果CAS更新失败，则从数据库刷新任务，看任务是否已经不一致了
+            task = repository.selectByRequestId(taskRequestId);
+            ExecStatus status = task.getStatus();
+
+            // 如果任务已经不是READY状态，那么就无需处理了
+            if (status != ExecStatus.READY) {
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("任务 [{}] 已经在其他机器处理了，无需重复处理", task);
+                }
+                return null;
+            }
+
+            // 继续尝试CAS，一般来说走不到这里，因为上边CAS更新失败应该是任务状态已经变更或者有其他并发线程/进程已经将该任务状态更新了
+            casUpdateResult = repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP);
+        }
+
+        // 任务锁定后从数据库刷新任务状态，因为内存中的可能已经不对了
+        task = repository.selectByRequestId(taskRequestId);
+        return task;
+    }
+
+    /**
      * 从队列中获取一个到期任务
      * 
      * @return 队列中的到期任务ID，当系统关闭时会返回null
      */
-    private String take() {
+    private String takeFromMemory() {
         return LockTaskUtil.runWithLock(queueLock.writeLock(), () -> {
             while (start) {
                 // 默认等待时间5秒，如果没有任务时会使用该值

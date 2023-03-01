@@ -102,4 +102,12 @@ public class AsyncTask extends DatabaseObj {
     @NotBlank
     private String execIp;
 
+    public static class ExtMapKey {
+
+        /**
+         * trace上下文
+         */
+        public static final String TRACE_CONTEXT = "traceContext";
+    }
+
 }
