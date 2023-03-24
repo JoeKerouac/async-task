@@ -62,7 +62,7 @@ create table if not exists `async_task`
     DEFAULT CHARSET = utf8mb4 comment '异步任务表';
 
 create unique index `idx_req` ON `async_task` (`request_id`);
-create index `idx_load` ON `async_task` (`status`, `exec_time`) comment '捞取任务使用该索引';
+create index `idx_load` ON `async_task` (`status`, `exec_time`, `processor`) comment '捞取任务使用该索引';
 create index `idx_clear` ON `async_task` (`processor` ,`task_finish_code`, `status`, `exec_time`) comment '清理任务使用该索引';
 
 ```
@@ -103,18 +103,8 @@ public class Test {
         DataSource dataSource = null;
 
         AsyncServiceConfig config = new AsyncServiceConfig();
+
         config.setRepository(new AsyncTaskRepositoryImpl(dataSource));
-        // 本地任务队列缓存大小，全量任务在数据库中，一定范围内本地缓存越大性能越好，但是缓存大占用内存也大，推荐100-300
-        config.setCacheQueueSize(200);
-        // 触发加载的队列长度阈值，当内存队列中的任务数量小于该值时将会触发从数据库中捞取数据
-        config.setLoadThreshold(30);
-        // 如果从数据库中没有捞取到数据，那么下次最小间隔多少毫秒才能再次捞取，防止数据库中没有任务时频繁的做空捞取，建议5秒；
-        // 该值不建议太小，也不建议太大，因为太大的话如果当前有多台机器时达不到负载均衡的效果；
-        config.setLoadInterval(5000);
-        // 多久触发一次对异步任务系统的常规监控，例如打印当前队列数量等；
-        config.setMonitorInterval(5000);
-        // 异步任务执行线程池配置
-        config.setThreadPoolConfig(new AsyncThreadPoolConfig());
         // ID生成器
         config.setIdGenerator(() -> {
             // TODO 注意这里自己实现下ID生成
@@ -138,6 +128,23 @@ public class Test {
         // 监控服务也需要自己实现，系统有一个默认的监控，只打印了日志，用户可以自己在实现来做些其他事情
         config.setMonitorService(new MonitorServiceAdaptor());
 
+        AsyncTaskExecutorConfig defaultExecutorConfig = new AsyncTaskExecutorConfig();
+        // 本地任务队列缓存大小，全量任务在数据库中，一定范围内本地缓存越大性能越好，但是缓存大占用内存也大，推荐100-300
+        defaultExecutorConfig.setCacheQueueSize(200);
+        // 触发加载的队列长度阈值，当内存队列中的任务数量小于该值时将会触发从数据库中捞取数据
+        defaultExecutorConfig.setLoadThreshold(30);
+        // 如果从数据库中没有捞取到数据，那么下次最小间隔多少毫秒才能再次捞取，防止数据库中没有任务时频繁的做空捞取，建议5秒；
+        // 该值不建议太小，也不建议太大，因为太大的话如果当前有多台机器时达不到负载均衡的效果；
+        defaultExecutorConfig.setLoadInterval(5000);
+        // 多久触发一次对异步任务系统的常规监控，例如打印当前队列数量等；
+        defaultExecutorConfig.setMonitorInterval(5000);
+        // 异步任务执行线程池配置
+        defaultExecutorConfig.setThreadPoolConfig(new AsyncThreadPoolConfig());
+
+        // 设置默认执行器配置
+        config.setDefaultExecutorConfig(defaultExecutorConfig);
+
+
         AsyncTaskServiceImpl service = new AsyncTaskServiceImpl(config);
         // 注意，服务使用前一定要启动，使用后一定要关闭，否则可能资源泄露
         service.start();
@@ -152,7 +159,7 @@ public class Test {
     public static class TestTaskProcessor extends AbstractAsyncTaskProcessor<TestTask> {
 
         @Override
-        public ExecResult process(final String requestId, final TestTask context) throws Throwable {
+        public ExecResult process(final String requestId, final TestTask context, , final Map<String, Object> cache) throws Throwable {
             // 这里放上处理逻辑，处理完后返回处理结果
             return ExecResult.SUCCESS;
         }
@@ -179,21 +186,23 @@ public class Test {
 ```yaml
 async:
   service:
-    # 任务缓存队列大小，0表示队列无限长，队列设置太小可能会影响性能；
-    cache-queue-size: 100
-    # 触发捞取任务的队列长度阈值，当任务缓存队列的实际长度小于等于该值时会触发任务捞取，应该小于{@link #cacheQueueSize}；
-    load-threshold: 30
-    # 当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒，注意不要配置太大，不然
-    # 应用的其他副本如果挂了，那个副本添加的任务就需要很长时间才会被本副本发现；
-    load-interval: 5000
-    # 触发定时监控的时间间隔，单位毫秒
-    monitor-interval: 5000
-    # 数据源名称，如果系统没有提供{@link com.github.joekerouac.async.task.spi.ConnectionSelector ConnectionSelector}这个bean，则需要提供数据源的名称
-    data-source: "asyncDataSource"
-    # 实际执行任务的线程池配置
-    thread-pool-config:
-      core-pool-size: 3
-      thread-name: async-worker
+    # 默认任务执行器
+    defaultExecutorConfig:
+      # 任务缓存队列大小，0表示队列无限长，队列设置太小可能会影响性能；
+      cache-queue-size: 100
+      # 触发捞取任务的队列长度阈值，当任务缓存队列的实际长度小于等于该值时会触发任务捞取，应该小于{@link #cacheQueueSize}；
+      load-threshold: 30
+      # 当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒，注意不要配置太大，不然
+      # 应用的其他副本如果挂了，那个副本添加的任务就需要很长时间才会被本副本发现；
+      load-interval: 5000
+      # 触发定时监控的时间间隔，单位毫秒
+      monitor-interval: 5000
+      # 数据源名称，如果系统没有提供{@link com.github.joekerouac.async.task.spi.ConnectionSelector ConnectionSelector}这个bean，则需要提供数据源的名称
+      data-source: "asyncDataSource"
+      # 实际执行任务的线程池配置
+      thread-pool-config:
+        core-pool-size: 3
+        thread-name: async-worker
 
 ```
 
