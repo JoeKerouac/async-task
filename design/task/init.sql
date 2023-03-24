@@ -20,7 +20,7 @@ create table if not exists `async_task`
   DEFAULT CHARSET = utf8mb4 comment '异步任务表';
 
 create unique index `idx_req` ON `async_task` (`request_id`);
-create index `idx_load` ON `async_task` (`status`, `exec_time`) comment '捞取任务使用该索引';
+create index `idx_load` ON `async_task` (`status`, `exec_time`, `processor`) comment '捞取任务使用该索引';
 create index `idx_clear` ON `async_task` (`processor`, `task_finish_code`, `status`, `exec_time`) comment '清理任务使用该索引';
 
 

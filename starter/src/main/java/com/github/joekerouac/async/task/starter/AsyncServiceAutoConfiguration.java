@@ -12,10 +12,7 @@
  */
 package com.github.joekerouac.async.task.starter;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.sql.DataSource;
@@ -32,9 +29,11 @@ import org.springframework.context.annotation.Bean;
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
+import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
 import com.github.joekerouac.async.task.spi.*;
 import com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel;
+import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.string.StringUtils;
 
 import lombok.CustomLog;
@@ -157,18 +156,38 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
 
         AsyncServiceConfig config = new AsyncServiceConfig();
         config.setRepository(asyncTaskRepository);
-        config.setCacheQueueSize(asyncServiceConfigModel.getCacheQueueSize());
-        config.setLoadThreshold(asyncServiceConfigModel.getLoadThreshold());
-        config.setLoadInterval(asyncServiceConfigModel.getLoadInterval());
-        config.setMonitorInterval(asyncServiceConfigModel.getMonitorInterval());
-        config.setThreadPoolConfig(asyncServiceConfigModel.getThreadPoolConfig());
         config.setIdGenerator(asyncIdGenerator);
         config.setTransactionHook(transactionHook);
         config.setMonitorService(monitorService);
-        config.setProcessorSupplier(supplier);
         config.setTraceService(traceService);
+        config.setProcessorSupplier(supplier);
+        config.setDefaultExecutorConfig(convert(asyncServiceConfigModel.getDefaultExecutorConfig()));
 
+        Map<Set<String>, AsyncServiceConfigModel.Config> configs = asyncServiceConfigModel.getExecutorConfigs();
+        Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = new HashMap<>();
+        if (!CollectionUtil.isEmpty(configs)) {
+            configs.forEach((key, value) -> executorConfigs.put(key, convert(value)));
+        }
+
+        config.setExecutorConfigs(executorConfigs);
         return new AsyncTaskServiceImpl(config);
+    }
+
+    /**
+     * AsyncServiceConfigModel转换为AsyncTaskExecutorConfig
+     * 
+     * @param config
+     *            AsyncServiceConfigModel
+     * @return AsyncTaskExecutorConfig
+     */
+    private AsyncTaskExecutorConfig convert(AsyncServiceConfigModel.Config config) {
+        AsyncTaskExecutorConfig executorConfig = new AsyncTaskExecutorConfig();
+        executorConfig.setCacheQueueSize(config.getCacheQueueSize());
+        executorConfig.setLoadThreshold(config.getLoadThreshold());
+        executorConfig.setLoadInterval(config.getLoadInterval());
+        executorConfig.setMonitorInterval(config.getMonitorInterval());
+        executorConfig.setThreadPoolConfig(config.getThreadPoolConfig());
+        return executorConfig;
     }
 
     @Bean

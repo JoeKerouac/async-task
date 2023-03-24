@@ -26,17 +26,17 @@ import javax.sql.DataSource;
 import org.testng.Assert;
 
 import com.alibaba.druid.pool.DruidDataSource;
-import com.github.joekerouac.common.tools.io.IOUtils;
-import com.github.joekerouac.common.tools.resource.impl.ClassPathResource;
-import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
-import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
+import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
 import com.github.joekerouac.async.task.service.TransactionSynchronizationManager;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.common.tools.io.IOUtils;
+import com.github.joekerouac.common.tools.resource.impl.ClassPathResource;
+import com.github.joekerouac.common.tools.string.StringUtils;
 
 /**
  * 方便其他系统开发测试用例的工具类
@@ -74,7 +74,7 @@ public class TestEngine {
         repository = new AsyncTaskRepositoryImpl(this.dataSource);
         asyncServiceConfig = new AsyncServiceConfig();
         asyncServiceConfig.setRepository(repository);
-        asyncServiceConfig.setThreadPoolConfig(new AsyncThreadPoolConfig());
+        asyncServiceConfig.setDefaultExecutorConfig(new AsyncTaskExecutorConfig());
         asyncServiceConfig.setIdGenerator(() -> UUID.randomUUID().toString());
 
         AsyncTaskService service = new AsyncTaskServiceImpl(asyncServiceConfig);

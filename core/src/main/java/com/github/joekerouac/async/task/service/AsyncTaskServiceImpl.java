@@ -13,7 +13,7 @@
 package com.github.joekerouac.async.task.service;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
+import java.util.*;
 
 import javax.validation.constraints.NotNull;
 
@@ -27,6 +27,7 @@ import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
 import com.github.joekerouac.async.task.model.*;
 import com.github.joekerouac.async.task.spi.*;
+import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.reflect.bean.BeanUtils;
 import com.github.joekerouac.common.tools.string.StringUtils;
@@ -50,19 +51,71 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     /**
      * 异步任务执行引擎
      */
-    private final AsyncTaskProcessorEngine engine;
+    private final AsyncTaskProcessorEngine defaultEngine;
+
+    /**
+     * key是processor name
+     */
+    private final Map<String, AsyncTaskProcessorEngine> engineMap;
 
     /**
      * 当前任务是否启动
      */
     private volatile boolean start = false;
 
-    private final TraceService traceService;
-
     public AsyncTaskServiceImpl(@NotNull AsyncServiceConfig config) {
         Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Assert.assertTrue(config.getRepository() != null || config.getConnectionSelector() != null,
             "仓储服务repository和链接选择器connectionSelector不能同时为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
+        Const.VALIDATION_SERVICE.validate(config);
+
+        MonitorService monitorService = config.getMonitorService();
+        monitorService = monitorService == null ? new MonitorServiceAdaptor() : monitorService;
+        if (!(monitorService instanceof MonitorServiceProxy)) {
+            monitorService = new MonitorServiceProxy(monitorService);
+        }
+
+        AsyncTaskRepository repository = config.getRepository();
+        repository = repository != null ? repository : new AsyncTaskRepositoryImpl(config.getConnectionSelector());
+        AsyncServiceConfig newConfig = BeanUtils.copyFromObjToObj(new AsyncServiceConfig(), config);
+        newConfig.setRepository(repository);
+        newConfig.setMonitorService(monitorService);
+
+        TaskClearRunner taskClearRunner = new TaskClearRunner(repository);
+
+        this.engineMap = new HashMap<>();
+        this.config = newConfig;
+
+        Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = newConfig.getExecutorConfigs();
+        Set<String> set = new HashSet<>();
+        if (!CollectionUtil.isEmpty(executorConfigs)) {
+            executorConfigs.forEach((processorNames, asyncServiceConfig) -> {
+                AsyncTaskProcessorEngine engine =
+                    build(newConfig, asyncServiceConfig, taskClearRunner, processorNames, true);
+                for (String processorName : processorNames) {
+                    Assert.assertTrue(set.add(processorName),
+                        StringUtils.format("处理器有多个配置, processor: [{}]", processorName),
+                        ExceptionProviderConst.IllegalArgumentExceptionProvider);
+                    engineMap.put(processorName, engine);
+                }
+            });
+        }
+
+        this.defaultEngine = build(newConfig, newConfig.getDefaultExecutorConfig(), taskClearRunner, set, false);
+
+        if (CollectionUtil.isNotEmpty(newConfig.getProcessors())) {
+            newConfig.getProcessors().forEach(this::addProcessor);
+        }
+
+        Thread taskClearThread = new Thread(taskClearRunner, "异步任务自动清理线程");
+        taskClearThread.setPriority(Thread.MIN_PRIORITY);
+        taskClearThread.setDaemon(true);
+        taskClearThread.start();
+    }
+
+    private AsyncTaskProcessorEngine build(AsyncServiceConfig asyncServiceConfig, AsyncTaskExecutorConfig config,
+        TaskClearRunner taskClearRunner, Set<String> processorNames, boolean contain) {
+        Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Const.VALIDATION_SERVICE.validate(config);
 
         int cacheQueueSize = config.getCacheQueueSize();
@@ -72,26 +125,8 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
                 .format("触发捞取任务的队列长度阈值应该小于缓存队列的长度，当前触发捞取任务的队列长度为：[{}],当前缓存队列长度为：[{}]", loadThreshold, cacheQueueSize),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
 
-        MonitorService monitorService = config.getMonitorService();
-        monitorService = monitorService == null ? new MonitorServiceAdaptor() : monitorService;
-        if (!(monitorService instanceof MonitorServiceProxy)) {
-            monitorService = new MonitorServiceProxy(monitorService);
-        }
         // 这里构建出仓储服务
-        AsyncTaskRepository repository = config.getRepository();
-        repository = repository != null ? repository : new AsyncTaskRepositoryImpl(config.getConnectionSelector());
-        AsyncServiceConfig newConfig = BeanUtils.copyFromObjToObj(new AsyncServiceConfig(), config);
-        newConfig.setRepository(repository);
-        newConfig.setMonitorService(monitorService);
-
-        this.config = newConfig;
-        TaskClearRunner taskClearRunner = new TaskClearRunner(repository);
-        this.engine = new AsyncTaskProcessorEngine(newConfig, taskClearRunner);
-        Thread taskClearThread = new Thread(taskClearRunner, "异步任务自动清理线程");
-        taskClearThread.setPriority(Thread.MIN_PRIORITY);
-        taskClearThread.setDaemon(true);
-        taskClearThread.start();
-        this.traceService = config.getTraceService();
+        return new AsyncTaskProcessorEngine(asyncServiceConfig, config, taskClearRunner, processorNames, contain);
     }
 
     @Override
@@ -100,7 +135,10 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             if (start) {
                 LOGGER.warn("当前异步任务服务已经启动，请勿重复调用启动方法");
             } else {
-                engine.start();
+                defaultEngine.start();
+                if (!engineMap.isEmpty()) {
+                    engineMap.values().forEach(AsyncTaskProcessorEngine::start);
+                }
                 start = true;
             }
         }
@@ -110,7 +148,10 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     public void stop() {
         synchronized (config) {
             if (start) {
-                engine.stop();
+                defaultEngine.stop();
+                if (!engineMap.isEmpty()) {
+                    engineMap.values().forEach(AsyncTaskProcessorEngine::stop);
+                }
                 start = false;
             } else {
                 LOGGER.warn("当前异步任务服务已经关闭，请勿重复调用关闭方法");
@@ -120,17 +161,19 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
     @Override
     public void addProcessor(final AbstractAsyncTaskProcessor<?> processor) {
-        engine.addProcessor(processor);
+        for (String name : processor.processors()) {
+            getEngine(name).addProcessor(processor);
+        }
     }
 
     @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(final String processorName) {
-        return engine.removeProcessor(processorName);
+        return getEngine(processorName).removeProcessor(processorName);
     }
 
     @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(final String processorName) {
-        return engine.getProcessor(processorName);
+        return getEngine(processorName).getProcessor(processorName);
     }
 
     @Override
@@ -189,7 +232,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         final LocalDateTime execTime, final String taskProcessor, TransStrategy transStrategy, ExecStatus status) {
         Assert.assertTrue(start, "当前服务还未启动，请先启动后调用", ExceptionProviderConst.IllegalStateExceptionProvider);
 
-        AbstractAsyncTaskProcessor<?> processor = engine.getProcessor(taskProcessor);
+        AbstractAsyncTaskProcessor<?> processor = getEngine(taskProcessor).getProcessor(taskProcessor);
         Assert.notNull(processor, StringUtils.format("指定的任务处理器 [{}] 不存在", taskProcessor),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
         IDGenerator idGenerator = config.getIdGenerator();
@@ -213,6 +256,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         asyncTask.setTaskFinishCode(TaskFinishCode.NONE);
         asyncTask.setCreateIp(Const.IP);
         asyncTask.setExecIp(Const.IP);
+        TraceService traceService = config.getTraceService();
         if (traceService != null) {
             String traceContext = traceService.dump();
             if (traceContext != null) {
@@ -248,7 +292,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         TransactionHook transactionHook = config.getTransactionHook();
 
         Runnable callback = () -> {
-            engine.addTask(Collections.singletonList(asyncTask));
+            getEngine(asyncTask.getProcessor()).addTask(Collections.singletonList(asyncTask));
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("将任务[{}]添加到内存队列中", asyncTask);
             }
@@ -295,6 +339,10 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             callback.run();
         }
 
+    }
+
+    private AsyncTaskProcessorEngine getEngine(String processor) {
+        return Optional.ofNullable(engineMap.get(processor)).orElse(defaultEngine);
     }
 
 }

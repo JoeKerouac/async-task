@@ -240,11 +240,12 @@ public class AsyncTaskProcessorTest extends TestEngine {
         equals(task, taskFromDb);
         Assert.assertNotEquals(task.getGmtUpdateTime(), taskFromDb.getGmtUpdateTime());
 
-        List<AsyncTask> asyncTasks =
-            repository.selectPage(ExecStatus.FINISH, LocalDateTime.now(), Collections.emptyList(), 0, 10);
+        List<AsyncTask> asyncTasks = repository.selectPage(ExecStatus.FINISH, LocalDateTime.now(),
+            Collections.emptyList(), 0, 10, Collections.emptySet(), false);
         Assert.assertTrue(asyncTasks.isEmpty());
 
-        asyncTasks = repository.selectPage(ExecStatus.FINISH, execTime, Collections.emptyList(), 0, 10);
+        asyncTasks = repository.selectPage(ExecStatus.FINISH, execTime, Collections.emptyList(), 0, 10,
+            Collections.emptySet(), false);
         Assert.assertFalse(asyncTasks.isEmpty());
         equals(task, asyncTasks.get(0));
 

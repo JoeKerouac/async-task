@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import javax.sql.DataSource;
 import javax.validation.constraints.NotNull;
@@ -62,7 +63,7 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     private static final String SQL_UPDATE = "update {} set {setTemp}, `gmt_update_time` = ? where `request_id` = ?";
 
     private static final String SQL_SELECT_PAGE =
-        "select * from {} where `status` = ? and `exec_time` <= ? {exclude} order by `exec_time` desc limit ? offset ?";
+        "select * from {} where `status` = ? and `exec_time` <= ? {dynamic} order by `exec_time` desc limit ? offset ?";
 
     private static final String SQL_SELECT_FINISH_PAGE =
         "select * from {} where `processor` = ? and `task_finish_code` = ? and `status` = 'FINISH' and `exec_time` <= ?"
@@ -187,32 +188,44 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     }
 
     @Override
-    public List<AsyncTask> selectPage(final ExecStatus status, final LocalDateTime dateTime,
-        final Collection<String> skipTaskRequestIds, final int offset, final int limit) {
-        String exclude;
-        if (skipTaskRequestIds.isEmpty()) {
-            exclude = StringConst.EMPTY;
-        } else {
-            String excludeTemp = "and `request_id` not in ({idList})";
-            exclude = excludeTemp.replace("{idList}", StringUtils.copy(", ?", skipTaskRequestIds.size()).substring(1));
-        }
+    public List<AsyncTask> selectPage(ExecStatus status, LocalDateTime dateTime, Collection<String> skipTaskRequestIds,
+        int offset, int limit, Set<String> processorGroup, boolean contain) {
+        String dynamic = StringConst.EMPTY;
 
-        Object[] params = new Object[4 + skipTaskRequestIds.size()];
+        Object[] params = new Object[4 + processorGroup.size() + skipTaskRequestIds.size()];
         int start = 0;
         params[start++] = status;
         params[start++] = dateTime;
 
-        for (final String requestId : skipTaskRequestIds) {
-            params[start++] = requestId;
+        if (!processorGroup.isEmpty()) {
+            String dynamicProcessor = " and `processor` " + (contain ? " in " : " not in ") + " ({processorList}) ";
+            dynamic += dynamicProcessor.replace("{processorList}", generatePlaceholder(processorGroup.size()));
+
+            for (final String processor : processorGroup) {
+                params[start++] = processor;
+            }
+        }
+
+        if (!skipTaskRequestIds.isEmpty()) {
+            String excludeTemp = " and `request_id` not in ({idList}) ";
+            dynamic += excludeTemp.replace("{idList}", generatePlaceholder(skipTaskRequestIds.size()));
+
+            for (final String requestId : skipTaskRequestIds) {
+                params[start++] = requestId;
+            }
         }
 
         params[start++] = limit;
         params[start] = offset;
 
-        return runSql(null, SQL_SELECT_PAGE.replace("{exclude}", exclude), preparedStatement -> {
-            ResultSet resultSet = preparedStatement.executeQuery();
-            return buildModel(resultSet);
-        }, params);
+        if (contain && processorGroup.isEmpty()) {
+            return Collections.emptyList();
+        } else {
+            return runSql(null, SQL_SELECT_PAGE.replace("{dynamic}", dynamic), preparedStatement -> {
+                ResultSet resultSet = preparedStatement.executeQuery();
+                return buildModel(resultSet);
+            }, params);
+        }
     }
 
     @Override
@@ -239,7 +252,7 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
             return 0;
         }
 
-        String paramsPlaceholder = StringUtils.copy(", ?", requestIds.size());
+        String paramsPlaceholder = generatePlaceholder(requestIds.size());
 
         return runSql(requestIds.get(0), SQL_DELETE.replace(PLACEHOLDER, paramsPlaceholder.substring(1)),
             PreparedStatement::executeUpdate, requestIds.toArray());
@@ -251,5 +264,16 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
             ResultSet resultSet = preparedStatement.executeQuery();
             return buildModel(resultSet);
         }, new Object[] {execTime});
+    }
+
+    /**
+     * 生成占位符
+     * 
+     * @param count
+     *            占位符数量
+     * @return 占位符，例如?, ?, ?
+     */
+    private String generatePlaceholder(int count) {
+        return StringUtils.copy(", ?", count).substring(1);
     }
 }

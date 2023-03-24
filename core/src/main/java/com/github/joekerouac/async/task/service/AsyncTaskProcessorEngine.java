@@ -76,7 +76,7 @@ class AsyncTaskProcessorEngine {
     /**
      * 异步任务配置
      */
-    private final AsyncServiceConfig config;
+    private final AsyncTaskExecutorConfig config;
 
     /**
      * 捞取异步任务的任务
@@ -113,14 +113,27 @@ class AsyncTaskProcessorEngine {
 
     private final MonitorService monitorService;
 
-    public AsyncTaskProcessorEngine(AsyncServiceConfig config, TaskClearRunner taskClearRunner) {
+    /**
+     * 处理的processor
+     */
+    private final Set<String> processorGroup;
+
+    /**
+     * 只处理指定的processor还是不处理指定的processor，true表示只处理指定的processor
+     */
+    private final boolean contain;
+
+    public AsyncTaskProcessorEngine(AsyncServiceConfig asyncServiceConfig, AsyncTaskExecutorConfig config,
+        TaskClearRunner taskClearRunner, Set<String> processorGroup, boolean contain) {
         this.config = config;
-        this.processorSupplier = config.getProcessorSupplier();
         this.taskClearRunner = taskClearRunner;
-        this.traceService = config.getTraceService();
-        this.repository = config.getRepository();
-        this.monitorService = config.getMonitorService();
+        this.processorSupplier = asyncServiceConfig.getProcessorSupplier();
+        this.traceService = asyncServiceConfig.getTraceService();
+        this.repository = asyncServiceConfig.getRepository();
+        this.monitorService = asyncServiceConfig.getMonitorService();
         processors = new ConcurrentHashMap<>();
+        this.processorGroup = processorGroup;
+        this.contain = contain;
 
         // 队列中按照时间从小到大排序
         queue =
@@ -129,12 +142,6 @@ class AsyncTaskProcessorEngine {
 
         queueLock = new ReentrantReadWriteLock();
         condition = queueLock.writeLock().newCondition();
-
-        if (config.getProcessors() != null && !config.getProcessors().isEmpty()) {
-            for (final AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
-                addProcessor(processor);
-            }
-        }
     }
 
     /**
@@ -279,8 +286,8 @@ class AsyncTaskProcessorEngine {
             loadSize = Math.min(loadSize, cacheQueueSize);
 
             // 从任务仓库中捞取任务
-            List<AsyncTask> tasks =
-                repository.selectPage(ExecStatus.READY, now.plusSeconds(MAX_TIME), requestIds, 0, loadSize);
+            List<AsyncTask> tasks = repository.selectPage(ExecStatus.READY, now.plusSeconds(MAX_TIME), requestIds, 0,
+                loadSize, processorGroup, contain);
 
             if (tasks.isEmpty()) {
                 // 没有捞取到任务，记录下本次捞取
