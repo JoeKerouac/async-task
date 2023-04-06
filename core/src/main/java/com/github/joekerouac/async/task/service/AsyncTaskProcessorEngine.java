@@ -400,6 +400,8 @@ class AsyncTaskProcessorEngine {
         }
 
         runTask(task);
+        // 任务执行完尝试加载新的任务
+        tryLoad();
     }
 
     /**
@@ -598,6 +600,16 @@ class AsyncTaskProcessorEngine {
     }
 
     /**
+     * 尝试加载数据
+     */
+    private void tryLoad() {
+        // 判断当前队列大小，如果到达了捞取阈值则触发捞取
+        if (queue.size() < config.getLoadThreshold()) {
+            loadTask.scheduler();
+        }
+    }
+
+    /**
      * 从队列中获取一个到期任务
      * 
      * @return 队列中的到期任务ID，当系统关闭时会返回null
@@ -621,11 +633,6 @@ class AsyncTaskProcessorEngine {
                     if (waitTime <= 0) {
                         // 将第一个删除
                         queue.pollFirst();
-                        // 判断当前队列大小，如果到达了捞取阈值则触发捞取
-                        if (queue.size() < config.getLoadThreshold()) {
-                            loadTask.scheduler();
-                        }
-
                         return pair.getKey();
                     }
                 }
