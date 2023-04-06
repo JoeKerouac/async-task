@@ -63,7 +63,7 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     private static final String SQL_UPDATE = "update {} set {setTemp}, `gmt_update_time` = ? where `request_id` = ?";
 
     private static final String SQL_SELECT_PAGE =
-        "select * from {} where `status` = ? and `exec_time` <= ? {dynamic} order by `exec_time` desc limit ? offset ?";
+        "select * from {} where `status` = ? and `exec_time` <= ? {dynamic} order by `exec_time` asc limit ? offset ?";
 
     private static final String SQL_SELECT_FINISH_PAGE =
         "select * from {} where `processor` = ? and `task_finish_code` = ? and `status` = 'FINISH' and `exec_time` <= ?"
