@@ -245,8 +245,8 @@ class AsyncTaskProcessorEngine {
 
             for (final AsyncTask task : tasks) {
                 // 这里兜底确保任务没有添加过；PS：其实就算任务添加过，后续执行中还会有检查，问题不大
-                if (!this.queue.add(new Pair<>(task.getRequestId(), task.getExecTime()))) {
-                    LOGGER.info("任务 [{}] 已经在队列中了，忽略该任务", task);
+                if (!this.queue.add(new Pair<>(task.getRequestId(), task.getExecTime())) && LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("任务 [{}] 已经在队列中了，忽略该任务", task);
                 }
             }
 
