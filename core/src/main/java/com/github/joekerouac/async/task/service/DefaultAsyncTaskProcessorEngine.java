@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,13 +33,14 @@ import java.util.stream.Collectors;
 
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
-import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
+import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
 import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
+import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.ProcessorSupplier;
@@ -62,7 +64,7 @@ import lombok.CustomLog;
  * @since 1.0.0
  */
 @CustomLog
-class AsyncTaskProcessorEngine {
+public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine {
 
     /**
      * 默认工作线程名
@@ -92,7 +94,7 @@ class AsyncTaskProcessorEngine {
     /**
      * 异步任务配置
      */
-    private final AsyncTaskExecutorConfig config;
+    private final AsyncTaskExecutorConfig executorConfig;
 
     /**
      * 捞取异步任务的任务
@@ -139,17 +141,19 @@ class AsyncTaskProcessorEngine {
      */
     private final boolean contain;
 
-    public AsyncTaskProcessorEngine(AsyncServiceConfig asyncServiceConfig, AsyncTaskExecutorConfig config,
-        TaskClearRunner taskClearRunner, Set<String> processorGroup, boolean contain) {
-        this.config = config;
-        this.taskClearRunner = taskClearRunner;
-        this.processorSupplier = asyncServiceConfig.getProcessorSupplier();
-        this.traceService = asyncServiceConfig.getTraceService();
-        this.repository = asyncServiceConfig.getRepository();
-        this.monitorService = asyncServiceConfig.getMonitorService();
+    public DefaultAsyncTaskProcessorEngine(AsyncTaskProcessorEngineConfig engineConfig) {
+        Assert.notNull(engineConfig, "engineConfig不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
+        Const.VALIDATION_SERVICE.validate(engineConfig);
+
+        this.executorConfig = engineConfig.getExecutorConfig();
+        this.taskClearRunner = engineConfig.getTaskClearRunner();
+        this.processorSupplier = engineConfig.getProcessorSupplier();
+        this.traceService = engineConfig.getTraceService();
+        this.repository = engineConfig.getRepository();
+        this.monitorService = engineConfig.getMonitorService();
         processors = new ConcurrentHashMap<>();
-        this.processorGroup = processorGroup;
-        this.contain = contain;
+        this.processorGroup = Collections.unmodifiableSet(engineConfig.getProcessorGroup());
+        this.contain = engineConfig.isContain();
 
         // 队列中按照时间从小到大排序
         queue =
@@ -160,18 +164,17 @@ class AsyncTaskProcessorEngine {
         condition = queueLock.writeLock().newCondition();
     }
 
-    /**
-     * 添加处理器
-     *
-     * @param processor
-     *            处理器
-     */
+    @Override
     public void addProcessor(AbstractAsyncTaskProcessor<?> processor) {
         Assert.notNull(processor, "待添加的异步任务处理器不能为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Assert.assertTrue(!CollectionUtil.isEmpty(processor.processors()),
             StringUtils.format("处理器可以处理的任务类型不能为空， [{}]", processor),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
         for (final String name : processor.processors()) {
+            Assert.assertTrue(
+                (contain && processorGroup.contains(name)) || (!contain && !processorGroup.contains(name)), StringUtils
+                    .format("本任务处理引擎无法处理任务: [{}], contain: [{}], processorGroup: [{}]", name, contain, processorGroup),
+                ExceptionProviderConst.CodeErrorExceptionProvider);
             if (processor.autoClear()) {
                 taskClearRunner.addClearDesc(name, processor.reserve());
             }
@@ -187,14 +190,8 @@ class AsyncTaskProcessorEngine {
         }
     }
 
-    /**
-     * 移除指定处理器
-     *
-     * @param processorName
-     *            处理器名
-     * @return 如果指定处理器存在，则将其移除，并且返回
-     */
     @SuppressWarnings("unchecked")
+    @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(String processorName) {
         P processor = (P)processors.remove(processorName);
         if (processor != null && processor.autoClear()) {
@@ -204,14 +201,8 @@ class AsyncTaskProcessorEngine {
         return processor;
     }
 
-    /**
-     * 获取指定处理器
-     *
-     * @param processorName
-     *            处理器名
-     * @return 指定的处理器，如果不存在则返回null
-     */
     @SuppressWarnings("unchecked")
+    @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String processorName) {
         P processor = (P)processors.get(processorName);
         if (processor == null && processorSupplier != null) {
@@ -229,12 +220,7 @@ class AsyncTaskProcessorEngine {
         return processor;
     }
 
-    /**
-     * 将任务批量添加到队列中，添加完毕后会检查队列是否超长，如果超长则直接丢弃任务
-     *
-     * @param tasks
-     *            要添加的任务
-     */
+    @Override
     public void addTask(Collection<AsyncTask> tasks) {
         if (tasks == null || tasks.isEmpty()) {
             return;
@@ -251,7 +237,7 @@ class AsyncTaskProcessorEngine {
             }
 
             // 如果队列超长，则将队列最后的任务删除，注意，这里可能多线程都在处理，不过无所谓，最差也就是队列被删除到长度小于cacheQueueSize
-            while (queue.size() - config.getCacheQueueSize() > 0) {
+            while (queue.size() - executorConfig.getCacheQueueSize() > 0) {
                 this.queue.pollLast();
             }
 
@@ -269,9 +255,7 @@ class AsyncTaskProcessorEngine {
         });
     }
 
-    /**
-     * 启动
-     */
+    @Override
     public synchronized void start() {
         LOGGER.info("异步任务引擎准备启动...");
         start = true;
@@ -283,10 +267,10 @@ class AsyncTaskProcessorEngine {
             // 距离上次空捞取的时间间隔
             long interval = System.currentTimeMillis() - lastEmptyLoad;
 
-            if (interval < config.getLoadInterval()) {
+            if (interval < executorConfig.getLoadInterval()) {
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("当前距离上次空捞取的时间间隔为 [{}ms] ，小于系统配置的最小空捞取间隔 [{}ms]，跳过", interval,
-                        config.getLoadInterval());
+                        executorConfig.getLoadInterval());
                 }
                 return;
             }
@@ -297,7 +281,7 @@ class AsyncTaskProcessorEngine {
 
             // 这里捞取的任务应该不仅能填充队列剩余大小，还应该可以多捞取一些，因为存在这样的情况：本机缓存的任务都是未来将要执行的，而任务仓库中有大量其他
             // 服务示例存储的当前要立即执行的任务，此时如果只捞取队列剩余空间数量的任务，可能会导致其他任务无法被捞取
-            int cacheQueueSize = config.getCacheQueueSize();
+            int cacheQueueSize = executorConfig.getCacheQueueSize();
             int loadSize = (cacheQueueSize - requestIds.size()) * 2 + 5;
             loadSize = Math.min(loadSize, cacheQueueSize);
 
@@ -313,21 +297,22 @@ class AsyncTaskProcessorEngine {
             }
 
         }, "task-load", true);
-        loadTask.setFixedDelay(config.getLoadInterval());
+        loadTask.setFixedDelay(executorConfig.getLoadInterval());
         loadTask.start();
 
         // 监控线程设置为daemon线程，系统关闭的时候不用处理
         Thread monitorThread = new Thread(() -> {
             while (start) {
                 try {
-                    Thread.sleep(config.getMonitorInterval());
+                    Thread.sleep(executorConfig.getMonitorInterval());
                     LockTaskUtil.runWithLock(queueLock.readLock(), () -> monitorService.monitor(queue.size()));
 
                     // 统计在指定时间之前就开始执行的任务
-                    LocalDateTime execTime = LocalDateTime.now().plus(-config.getExecTimeout(), ChronoUnit.MILLIS);
+                    LocalDateTime execTime =
+                        LocalDateTime.now().plus(-executorConfig.getExecTimeout(), ChronoUnit.MILLIS);
                     List<AsyncTask> tasks = repository.stat(execTime);
                     if (!tasks.isEmpty()) {
-                        monitorService.taskExecTimeout(tasks, config.getExecTimeout());
+                        monitorService.taskExecTimeout(tasks, executorConfig.getExecTimeout());
                     }
                 } catch (Throwable throwable) {
                     if (!(throwable instanceof InterruptedException)) {
@@ -339,14 +324,15 @@ class AsyncTaskProcessorEngine {
         monitorThread.setDaemon(true);
         monitorThread.start();
 
-        AsyncThreadPoolConfig threadPoolConfig = config.getThreadPoolConfig();
+        AsyncThreadPoolConfig threadPoolConfig = executorConfig.getThreadPoolConfig();
         workerThreads = new Thread[threadPoolConfig.getCorePoolSize()];
         for (int i = 0; i < workerThreads.length; i++) {
             Thread thread = new Thread(() -> {
                 Thread currentThread = Thread.currentThread();
                 // 默认使用加载本类的class loader作为线程的上下文loader
                 ClassLoader loader = threadPoolConfig.getDefaultContextClassLoader() == null
-                    ? AsyncTaskProcessorEngine.class.getClassLoader() : threadPoolConfig.getDefaultContextClassLoader();
+                    ? DefaultAsyncTaskProcessorEngine.class.getClassLoader()
+                    : threadPoolConfig.getDefaultContextClassLoader();
 
                 while (start) {
                     currentThread.setContextClassLoader(loader);
@@ -372,9 +358,7 @@ class AsyncTaskProcessorEngine {
         LOGGER.info("异步任务引擎启动成功...");
     }
 
-    /**
-     * 关闭
-     */
+    @Override
     public synchronized void stop() {
         LOGGER.info("异步任务引擎准备关闭...");
         start = false;
@@ -604,7 +588,7 @@ class AsyncTaskProcessorEngine {
      */
     private void tryLoad() {
         // 判断当前队列大小，如果到达了捞取阈值则触发捞取
-        if (queue.size() < config.getLoadThreshold()) {
+        if (queue.size() < executorConfig.getLoadThreshold()) {
             loadTask.scheduler();
         }
     }

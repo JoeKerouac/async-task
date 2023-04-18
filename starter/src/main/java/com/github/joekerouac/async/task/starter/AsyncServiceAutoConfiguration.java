@@ -12,7 +12,11 @@
  */
 package com.github.joekerouac.async.task.starter;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.sql.DataSource;
@@ -31,7 +35,16 @@ import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
-import com.github.joekerouac.async.task.spi.*;
+import com.github.joekerouac.async.task.service.DefaultAsyncTaskProcessorEngineFactory;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
+import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngineFactory;
+import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.IDGenerator;
+import com.github.joekerouac.async.task.spi.MonitorService;
+import com.github.joekerouac.async.task.spi.ProcessorSupplier;
+import com.github.joekerouac.async.task.spi.TraceService;
+import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.string.StringUtils;
@@ -56,9 +69,15 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
 
     @Bean(initMethod = "start", destroyMethod = "stop")
     @ConditionalOnMissingBean
-    public AsyncTaskService asyncTaskService(@Autowired AsyncServiceConfigModel asyncServiceConfigModel,
-        @Autowired AsyncTaskRepository asyncTaskRepository, @Autowired IDGenerator asyncIdGenerator,
-        @Autowired(required = false) TransactionHook transactionHook,
+    public AsyncTaskService asyncTaskService(@Autowired AsyncServiceConfig config) {
+        return new AsyncTaskServiceImpl(config);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AsyncServiceConfig asyncServiceConfig(@Autowired AsyncServiceConfigModel asyncServiceConfigModel,
+        @Autowired AsyncTaskProcessorEngineFactory engineFactory, @Autowired AsyncTaskRepository asyncTaskRepository,
+        @Autowired IDGenerator asyncIdGenerator, @Autowired(required = false) TransactionHook transactionHook,
         @Autowired(required = false) MonitorService monitorService,
         @Autowired(required = false) TraceService traceService) {
         LOGGER.debug("当前异步任务服务配置详情为： [{}:{}:{}:{}:{}]", asyncServiceConfigModel, asyncTaskRepository, asyncIdGenerator,
@@ -162,6 +181,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         config.setTraceService(traceService);
         config.setProcessorSupplier(supplier);
         config.setDefaultExecutorConfig(convert(asyncServiceConfigModel.getDefaultExecutorConfig()));
+        config.setEngineFactory(engineFactory);
 
         Map<Set<String>, AsyncServiceConfigModel.Config> configs = asyncServiceConfigModel.getExecutorConfigs();
         Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = new HashMap<>();
@@ -170,7 +190,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         }
 
         config.setExecutorConfigs(executorConfigs);
-        return new AsyncTaskServiceImpl(config);
+        return config;
     }
 
     /**
@@ -188,6 +208,12 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         executorConfig.setMonitorInterval(config.getMonitorInterval());
         executorConfig.setThreadPoolConfig(config.getThreadPoolConfig());
         return executorConfig;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    private AsyncTaskProcessorEngineFactory engineFactory() {
+        return new DefaultAsyncTaskProcessorEngineFactory();
     }
 
     @Bean

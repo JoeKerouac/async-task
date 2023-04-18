@@ -13,7 +13,12 @@
 package com.github.joekerouac.async.task.service;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import javax.validation.constraints.NotNull;
 
@@ -22,14 +27,25 @@ import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.entity.common.ExtMap;
-import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
-import com.github.joekerouac.async.task.model.*;
-import com.github.joekerouac.async.task.spi.*;
+import com.github.joekerouac.async.task.model.AsyncServiceConfig;
+import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
+import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
+import com.github.joekerouac.async.task.model.CancelStatus;
+import com.github.joekerouac.async.task.model.ExecStatus;
+import com.github.joekerouac.async.task.model.TaskFinishCode;
+import com.github.joekerouac.async.task.model.TransStrategy;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
+import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine;
+import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.IDGenerator;
+import com.github.joekerouac.async.task.spi.MonitorService;
+import com.github.joekerouac.async.task.spi.TraceService;
+import com.github.joekerouac.async.task.spi.TransactionCallback;
+import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
-import com.github.joekerouac.common.tools.reflect.bean.BeanUtils;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
 
@@ -65,8 +81,6 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
     public AsyncTaskServiceImpl(@NotNull AsyncServiceConfig config) {
         Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
-        Assert.assertTrue(config.getRepository() != null || config.getConnectionSelector() != null,
-            "仓储服务repository和链接选择器connectionSelector不能同时为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Const.VALIDATION_SERVICE.validate(config);
 
         MonitorService monitorService = config.getMonitorService();
@@ -74,24 +88,21 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         if (!(monitorService instanceof MonitorServiceProxy)) {
             monitorService = new MonitorServiceProxy(monitorService);
         }
+        config.setMonitorService(monitorService);
+        if (config.getEngineFactory() == null) {
+            config.setEngineFactory(new DefaultAsyncTaskProcessorEngineFactory());
+        }
 
-        AsyncTaskRepository repository = config.getRepository();
-        repository = repository != null ? repository : new AsyncTaskRepositoryImpl(config.getConnectionSelector());
-        AsyncServiceConfig newConfig = BeanUtils.copyFromObjToObj(new AsyncServiceConfig(), config);
-        newConfig.setRepository(repository);
-        newConfig.setMonitorService(monitorService);
-
-        TaskClearRunner taskClearRunner = new TaskClearRunner(repository);
+        TaskClearRunner taskClearRunner = new TaskClearRunner(config.getRepository());
 
         this.engineMap = new HashMap<>();
-        this.config = newConfig;
+        this.config = config;
 
-        Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = newConfig.getExecutorConfigs();
+        Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = config.getExecutorConfigs();
         Set<String> set = new HashSet<>();
         if (!CollectionUtil.isEmpty(executorConfigs)) {
-            executorConfigs.forEach((processorNames, asyncServiceConfig) -> {
-                AsyncTaskProcessorEngine engine =
-                    build(newConfig, asyncServiceConfig, taskClearRunner, processorNames, true);
+            executorConfigs.forEach((processorNames, executorConfig) -> {
+                AsyncTaskProcessorEngine engine = build(config, taskClearRunner, processorNames, true);
                 for (String processorName : processorNames) {
                     Assert.assertTrue(set.add(processorName),
                         StringUtils.format("处理器有多个配置, processor: [{}]", processorName),
@@ -101,10 +112,10 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             });
         }
 
-        this.defaultEngine = build(newConfig, newConfig.getDefaultExecutorConfig(), taskClearRunner, set, false);
+        this.defaultEngine = build(config, taskClearRunner, set, false);
 
-        if (CollectionUtil.isNotEmpty(newConfig.getProcessors())) {
-            newConfig.getProcessors().forEach(this::addProcessor);
+        if (CollectionUtil.isNotEmpty(config.getProcessors())) {
+            config.getProcessors().forEach(this::addProcessor);
         }
 
         Thread taskClearThread = new Thread(taskClearRunner, "异步任务自动清理线程");
@@ -113,20 +124,40 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         taskClearThread.start();
     }
 
-    private AsyncTaskProcessorEngine build(AsyncServiceConfig asyncServiceConfig, AsyncTaskExecutorConfig config,
-        TaskClearRunner taskClearRunner, Set<String> processorNames, boolean contain) {
-        Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
-        Const.VALIDATION_SERVICE.validate(config);
+    /**
+     * 构建异步任务执行引擎
+     * 
+     * @param asyncServiceConfig
+     *            异步任务配置
+     * @param taskClearRunner
+     *            任务清理器
+     * @param processorGroup
+     *            任务列表
+     * @param contain
+     *            true表示异步任务引擎只处理processorGroup中包含的任务，false表示异步任务处理引擎不应该处理processorGroup中包含的任务，而应该处理所有其他任务
+     * @return 异步任务执行引擎
+     */
+    private AsyncTaskProcessorEngine build(AsyncServiceConfig asyncServiceConfig, TaskClearRunner taskClearRunner,
+        Set<String> processorGroup, boolean contain) {
+        AsyncTaskProcessorEngineConfig engineConfig = new AsyncTaskProcessorEngineConfig();
+        engineConfig.setExecutorConfig(asyncServiceConfig.getDefaultExecutorConfig());
+        engineConfig.setRepository(asyncServiceConfig.getRepository());
+        engineConfig.setProcessorSupplier(asyncServiceConfig.getProcessorSupplier());
+        engineConfig.setTraceService(asyncServiceConfig.getTraceService());
+        engineConfig.setMonitorService(asyncServiceConfig.getMonitorService());
+        engineConfig.setTaskClearRunner(taskClearRunner);
+        engineConfig.setProcessorGroup(processorGroup);
+        engineConfig.setContain(contain);
 
-        int cacheQueueSize = config.getCacheQueueSize();
-        int loadThreshold = config.getLoadThreshold();
+        int cacheQueueSize = engineConfig.getExecutorConfig().getCacheQueueSize();
+        int loadThreshold = engineConfig.getExecutorConfig().getLoadThreshold();
         Assert.assertTrue(
             loadThreshold < cacheQueueSize || (loadThreshold == 0 && cacheQueueSize == 0), StringUtils
                 .format("触发捞取任务的队列长度阈值应该小于缓存队列的长度，当前触发捞取任务的队列长度为：[{}],当前缓存队列长度为：[{}]", loadThreshold, cacheQueueSize),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
 
         // 这里构建出仓储服务
-        return new AsyncTaskProcessorEngine(asyncServiceConfig, config, taskClearRunner, processorNames, contain);
+        return asyncServiceConfig.getEngineFactory().create(engineConfig);
     }
 
     @Override

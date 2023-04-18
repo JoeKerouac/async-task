@@ -159,7 +159,7 @@ public class Test {
     public static class TestTaskProcessor extends AbstractAsyncTaskProcessor<TestTask> {
 
         @Override
-        public ExecResult process(final String requestId, final TestTask context, , final Map<String, Object> cache) throws Throwable {
+        public ExecResult process(final String requestId, final TestTask context, final Map<String, Object> cache) throws Throwable {
             // 这里放上处理逻辑，处理完后返回处理结果
             return ExecResult.SUCCESS;
         }
