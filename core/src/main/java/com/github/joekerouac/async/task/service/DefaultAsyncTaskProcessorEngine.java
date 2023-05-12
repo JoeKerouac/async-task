@@ -13,10 +13,10 @@
 package com.github.joekerouac.async.task.service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -156,9 +156,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         this.contain = engineConfig.isContain();
 
         // 队列中按照时间从小到大排序
-        queue =
-            new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli()
-                - t1.getValue().atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli()));
+        queue = new TreeSet<>(Comparator.comparing(Pair::getValue));
 
         queueLock = new ReentrantReadWriteLock();
         condition = queueLock.writeLock().newCondition();

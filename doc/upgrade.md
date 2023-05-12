@@ -20,3 +20,14 @@
 - 调度器优化，任务执行失败进入重试队列时不直接添加到内存中，否则在大量失败时队列中将存满失败任务，新的任务无法执行；
 - 任务捞取sql bug修复，我们期望按照执行时间升序捞取，老版本中是按照执行时间降序捞取的，这个版本修复;
 - 支持自定义任务执行引擎；
+- 修复BUG：`com.github.joekerouac.async.task.service.DefaultAsyncTaskProcessorEngine.queue`的排序方法有问题
+
+## buf fix
+`com.github.joekerouac.async.task.service.DefaultAsyncTaskProcessorEngine.queue`的排序方法有问题，原排序方法：
+
+```
+queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli()
+          - t1.getValue().atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli()));
+```
+
+将long类型的结果强转为了int值，存在溢出的问题，同时鉴于`java.time.LocalDateTime`实现了`java.lang.Comparable`接口，可以直接调用其`compare`方法作为排序器；
