@@ -239,22 +239,22 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
         return TransUtil.run(transStrategy, () -> {
             AsyncTask task = config.getRepository().selectByRequestId(requestId);
-            if (task != null) {
-                if (task.getStatus() == ExecStatus.RUNNING) {
-                    return CancelStatus.RUNNING;
-                } else if (task.getStatus() == ExecStatus.FINISH) {
-                    return CancelStatus.FINISH;
-                } else {
-                    // cas取消成功就返回，否则继续循环
-                    if (config.getRepository().casCancel(requestId, task.getStatus(), Const.IP) > 0) {
-                        return CancelStatus.SUCCESS;
-                    } else {
-                        LOGGER.info("任务取消失败，当前任务状态: [{}:{}]", requestId, task.getStatus());
-                        return CancelStatus.UNKNOWN;
-                    }
-                }
-            } else {
+            if (task == null) {
                 return CancelStatus.NOT_EXIST;
+            }
+
+            if (task.getStatus() == ExecStatus.RUNNING) {
+                return CancelStatus.RUNNING;
+            } else if (task.getStatus() == ExecStatus.FINISH) {
+                return CancelStatus.FINISH;
+            } else {
+                // cas取消成功就返回，否则继续循环
+                if (config.getRepository().casCancel(requestId, task.getStatus(), Const.IP) > 0) {
+                    return CancelStatus.SUCCESS;
+                } else {
+                    LOGGER.info("任务取消失败，当前任务状态: [{}:{}]", requestId, task.getStatus());
+                    return CancelStatus.UNKNOWN;
+                }
             }
         });
     }
