@@ -31,3 +31,7 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 ```
 
 将long类型的结果强转为了int值，存在溢出的问题，同时鉴于`java.time.LocalDateTime`实现了`java.lang.Comparable`接口，可以直接调用其`compare`方法作为排序器；
+
+# v2.0.4
+- 潜在风险优化：在取消任务时不再死循环直到任务取消成功（某些场景可能死循环），由外部自行处理；
+

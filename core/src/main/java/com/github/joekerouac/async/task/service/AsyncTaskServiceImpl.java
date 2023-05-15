@@ -238,24 +238,24 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         Assert.assertTrue(start, "当前服务还未启动，请先启动后调用", ExceptionProviderConst.IllegalStateExceptionProvider);
 
         return TransUtil.run(transStrategy, () -> {
-            while (true) {
-                AsyncTask task = config.getRepository().selectByRequestId(requestId);
-                if (task != null) {
-                    if (task.getStatus() == ExecStatus.RUNNING) {
-                        return CancelStatus.RUNNING;
-                    } else if (task.getStatus() == ExecStatus.FINISH) {
-                        return CancelStatus.FINISH;
-                    } else {
-                        // cas取消成功就返回，否则继续循环
-                        if (config.getRepository().casCancel(requestId, task.getStatus(), Const.IP) > 0) {
-                            return CancelStatus.SUCCESS;
-                        }
-                    }
+            AsyncTask task = config.getRepository().selectByRequestId(requestId);
+            if (task != null) {
+                if (task.getStatus() == ExecStatus.RUNNING) {
+                    return CancelStatus.RUNNING;
+                } else if (task.getStatus() == ExecStatus.FINISH) {
+                    return CancelStatus.FINISH;
                 } else {
-                    return CancelStatus.NOT_EXIST;
+                    // cas取消成功就返回，否则继续循环
+                    if (config.getRepository().casCancel(requestId, task.getStatus(), Const.IP) > 0) {
+                        return CancelStatus.SUCCESS;
+                    } else {
+                        LOGGER.info("任务取消失败，当前任务状态: [{}:{}]", requestId, task.getStatus());
+                        return CancelStatus.UNKNOWN;
+                    }
                 }
+            } else {
+                return CancelStatus.NOT_EXIST;
             }
-
         });
     }
 

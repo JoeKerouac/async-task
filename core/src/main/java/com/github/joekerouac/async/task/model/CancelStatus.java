@@ -31,6 +31,8 @@ public enum CancelStatus implements EnumInterface {
 
     NOT_EXIST("NOT_EXIST", "任务不存在 ，取消失败", "NOT_EXIST"),
 
+    UNKNOWN("UNKNOWN", "取消失败，原因未知，可能是并发取消任务了", "UNKNOWN"),
+
     ;
 
     static {
