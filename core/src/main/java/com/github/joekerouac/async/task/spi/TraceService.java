@@ -37,12 +37,15 @@ public interface TraceService {
      *            第几次重试
      * @param traceContext
      *            traceContext
+     * @return 上下文，会在finish时传入
      */
-    void resume(int retry, @NotNull String traceContext);
+    Object resume(int retry, @NotNull String traceContext);
 
     /**
      * 结束当前trace
-     * 
+     *
+     * @param context
+     *            {@link #resume(int, String)}返回的上下文
      * @param retry
      *            是否还会重试
      * @param result
@@ -50,6 +53,6 @@ public interface TraceService {
      * @param throwable
      *            异常
      */
-    void finish(boolean retry, Object result, Throwable throwable);
+    void finish(Object context, boolean retry, Object result, Throwable throwable);
 
 }

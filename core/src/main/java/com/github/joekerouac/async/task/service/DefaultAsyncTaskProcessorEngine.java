@@ -439,8 +439,9 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         String traceContext = Optional.ofNullable(task.getExtMap())
             .map(map -> (String)map.get(AsyncTask.ExtMapKey.TRACE_CONTEXT)).orElse(null);
+        Object traceScope = null;
         if (traceService != null && traceContext != null) {
-            traceService.resume(task.getRetry(), traceContext);
+            traceScope = traceService.resume(task.getRetry(), traceContext);
         }
 
         try {
@@ -510,7 +511,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             }
         } finally {
             if (traceService != null && traceContext != null) {
-                traceService.finish(retry, result, throwable);
+                traceService.finish(traceScope, retry, result, throwable);
             }
         }
 
