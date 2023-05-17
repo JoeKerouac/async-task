@@ -625,7 +625,11 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         // 将第一个删除
                         queue.pollFirst();
                         return pair.getKey();
+                    } else {
+                        LOGGER.debug("当前第一个任务执行时间未到, execTime: [{}], now: [{}]", execTime, now);
                     }
+                } else {
+                    LOGGER.debug("当前队列为空，等待下次唤醒");
                 }
 
                 // 这里设置最多等待到第一个任务就绪时间，如果有更早的就绪的任务插入，则也可以直接唤醒这个检查
