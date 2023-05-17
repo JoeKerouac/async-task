@@ -360,6 +360,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         }
 
         if (needWait) {
+            LOGGER.debug("当前在事务中，等待事务提交后将任务提交到任务执行引擎");
             transactionHook.registerCallback(new TransactionCallback() {
                 @Override
                 public void afterCommit() throws RuntimeException {
@@ -367,6 +368,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
                 }
             });
         } else {
+            LOGGER.debug("当前不在事务中，直接将任务提交到任务执行引擎");
             callback.run();
         }
 

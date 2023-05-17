@@ -225,7 +225,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         }
 
         LockTaskUtil.runWithLock(queueLock.writeLock(), () -> {
-            LocalDateTime currentFirst = queue.isEmpty() ? null : queue.first().getValue();
+            Pair<String, LocalDateTime> oldFirst = queue.isEmpty() ? null : queue.first();
 
             for (final AsyncTask task : tasks) {
                 // 这里兜底确保任务没有添加过；PS：其实就算任务添加过，后续执行中还会有检查，问题不大
@@ -236,17 +236,25 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
             // 如果队列超长，则将队列最后的任务删除，注意，这里可能多线程都在处理，不过无所谓，最差也就是队列被删除到长度小于cacheQueueSize
             while (queue.size() - executorConfig.getCacheQueueSize() > 0) {
-                this.queue.pollLast();
+                Pair<String, LocalDateTime> remove = this.queue.pollLast();
+                if (remove != null && LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("当前任务队列超长，将最晚执行的任务移除, 移除的任务: [{}]", remove.getKey());
+                }
             }
 
-            if (currentFirst == null) {
+            if (oldFirst == null) {
+                LOGGER.debug("任务添加完毕，原队列为空，直接唤醒");
                 condition.signalAll();
             } else {
                 // 因为是添加任务，所以这里肯定有值了
-                LocalDateTime newFirst = queue.first().getValue();
+                Pair<String, LocalDateTime> newFirst = queue.first();
+
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("任务添加完毕，开始唤醒处理, oldFirst: [{}], new: [{}]", oldFirst, newFirst);
+                }
 
                 // 如果新加任务中有任务的就绪时间是早于当前任务的，应该通知所有线程去重新获取最新任务就绪时间，注意，这里是唤醒所有线程，而不是一个线程
-                if (newFirst.isBefore(currentFirst)) {
+                if (newFirst.getValue().isBefore(oldFirst.getValue())) {
                     condition.signalAll();
                 }
             }
