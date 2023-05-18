@@ -186,7 +186,7 @@ public abstract class AbstractAsyncTaskProcessor<T> {
         int index = retry - 1;
         // 这里使用局部变量重新引用，防止并发时外部反射替换字段导致后一步执行异常
         long[] retryTimeInterval = this.retryTimeInterval;
-        return index <= retryTimeInterval.length ? retryTimeInterval[index]
+        return index < retryTimeInterval.length ? retryTimeInterval[index]
             : retryTimeInterval[retryTimeInterval.length - 1];
     }
 

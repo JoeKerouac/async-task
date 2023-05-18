@@ -35,3 +35,4 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 # v2.0.4
 - 潜在风险优化：在取消任务时不再死循环直到任务取消成功（某些场景可能死循环），由外部自行处理；
 - 修改`com.github.joekerouac.async.task.spi.TraceService`定义；**不兼容**
+- 修复`com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor.nextExecTimeInterval`这里的潜在数组越界问题；
