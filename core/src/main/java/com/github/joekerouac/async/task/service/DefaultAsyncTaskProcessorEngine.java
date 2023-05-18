@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -578,6 +579,13 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("任务 [{}] 已经在其他机器处理了，无需重复处理", task);
                 }
+
+                String execIp = task.getExecIp();
+                // 理论上不应该出现
+                if (Objects.equals(execIp, Const.IP)) {
+                    LOGGER.warn("当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]", status, task);
+                }
+
                 return null;
             }
 
