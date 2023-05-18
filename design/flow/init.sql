@@ -6,8 +6,8 @@ create table if not exists `flow_task`
     `last_task_id`    varchar(100) not null comment '流式任务最后一个任务的request id',
     `status`          varchar(100) not null comment '流式任务状态，枚举值',
     `id`              varchar(100) not null,
-    `gmt_create_time` datetime     not null,
-    `gmt_update_time` datetime     not null,
+    `gmt_create_time` datetime(6)  not null,
+    `gmt_update_time` datetime(6)  not null,
     `ext_map`         varchar(2000),
     primary key (`id`)
 ) ENGINE = InnoDB
@@ -29,8 +29,8 @@ create table if not exists `task_node`
     `strategy_context` varchar(1000) not null comment '节点执行策略上下文，允许为null',
     `max_retry`        int           not null comment '最大重试次数',
     `id`               varchar(100)  not null,
-    `gmt_create_time`  datetime      not null,
-    `gmt_update_time`  datetime      not null,
+    `gmt_create_time`  datetime(6)   not null,
+    `gmt_update_time`  datetime(6)   not null,
     `ext_map`          varchar(2000),
     primary key (`id`)
 ) ENGINE = InnoDB
@@ -47,8 +47,8 @@ create table if not exists `task_node_map`
     `parent_node`     varchar(200) not null comment '父节点的幂等ID',
     `child_node`      varchar(200) not null comment '子节点的幂等ID',
     `id`              varchar(100) not null,
-    `gmt_create_time` datetime     not null,
-    `gmt_update_time` datetime     not null,
+    `gmt_create_time` datetime(6)  not null,
+    `gmt_update_time` datetime(6)  not null,
     `ext_map`         varchar(2000),
     primary key (`id`)
 ) ENGINE = InnoDB

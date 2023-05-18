@@ -44,11 +44,15 @@
 - D、E、F节点执行完毕后，G节点开始执行；
 
 ## 快速开始
+
 > 注意：流式任务框架依赖于异步任务框架，要使用流式任务框架必须先配置好异步任务框架；
 
 ### 引入依赖
+
 如果使用了spring，那么可以使用如下依赖：
+
 ```xml
+
 <dependency>
     <groupId>com.github.JoeKerouac</groupId>
     <artifactId>async-task-starter</artifactId>
@@ -56,16 +60,16 @@
 </dependency>
 ```
 
-
 如果未使用spring，那么应该使用下面的依赖：
+
 ```xml
+
 <dependency>
     <groupId>com.github.JoeKerouac</groupId>
     <artifactId>async-task-core</artifactId>
     <version>2.0.0</version>
 </dependency>
 ```
-
 
 ### 初始化数据库，创建async_task表
 
@@ -80,12 +84,12 @@ create table if not exists `flow_task`
     `last_task_id`    varchar(100) not null comment '流式任务最后一个任务的request id',
     `status`          varchar(100) not null comment '流式任务状态，枚举值',
     `id`              varchar(100) not null,
-    `gmt_create_time` datetime     not null,
-    `gmt_update_time` datetime     not null,
+    `gmt_create_time` datetime(6)  not null,
+    `gmt_update_time` datetime(6)  not null,
     `ext_map`         varchar(2000),
     primary key (`id`)
-    ) ENGINE = InnoDB
-    DEFAULT CHARSET = utf8mb4 comment '流式任务主任务表';
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 comment '流式任务主任务表';
 
 create unique index `idx_req` ON `flow_task` (`request_id`);
 create unique index `idx_status` ON `flow_task` (`type`, `status`, `gmt_update_time`);
@@ -103,12 +107,12 @@ create table if not exists `task_node`
     `strategy_context` varchar(1000) not null comment '节点执行策略上下文，允许为null',
     `max_retry`        int           not null comment '最大重试次数',
     `id`               varchar(100)  not null,
-    `gmt_create_time`  datetime      not null,
-    `gmt_update_time`  datetime      not null,
+    `gmt_create_time`  datetime(6)   not null,
+    `gmt_update_time`  datetime(6)   not null,
     `ext_map`          varchar(2000),
     primary key (`id`)
-    ) ENGINE = InnoDB
-    DEFAULT CHARSET = utf8mb4 comment '流式任务节点表';
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 comment '流式任务节点表';
 
 create unique index `idx_req` ON `task_node` (`request_id`);
 create index `idx_task_req_status` ON `task_node` (`task_request_id`, `status`, `gmt_update_time`);
@@ -121,12 +125,12 @@ create table if not exists `task_node_map`
     `parent_node`     varchar(200) not null comment '父节点的幂等ID',
     `child_node`      varchar(200) not null comment '子节点的幂等ID',
     `id`              varchar(100) not null,
-    `gmt_create_time` datetime     not null,
-    `gmt_update_time` datetime     not null,
+    `gmt_create_time` datetime(6)  not null,
+    `gmt_update_time` datetime(6)  not null,
     `ext_map`         varchar(2000),
     primary key (`id`)
-    ) ENGINE = InnoDB
-    DEFAULT CHARSET = utf8mb4 comment '流式任务节点关系表';
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 comment '流式任务节点关系表';
 
 create index `idx_task_req` on `task_node_map` (`task_request_id`);
 create index `idx_parent_req` on `task_node_map` (`parent_node`);
@@ -135,6 +139,7 @@ create index `idx_child_req` on `task_node_map` (`child_node`);
 ```
 
 ### 编程式使用
+
 > 编程式使用比较麻烦，如果可能，请尽量使用spring的方式；
 
 ```java
@@ -412,6 +417,7 @@ public class TestTaskProcessor extends AbstractFlowProcessor<TestTask> {
 ```
 
 #### 4、在主类上添加@EnableFlowTask注解
+
 > 注意，加了EnableFlowTask注解就不用添加EnableAsyncTask注解了，EnableFlowTask注解自动包含了EnableAsyncTask注解；
 
 ```java
@@ -426,7 +432,6 @@ public class Main {
     }
 }
 ```
-
 
 #### 5、流式任务系统已经就绪，开始使用
 
@@ -483,37 +488,41 @@ public class TestService {
 ```
 
 ## 高级概念介绍
+
 在上边的文档中有提到失败策略（FailStrategy）和执行策略（ExecuteStrategy），那这两个策略分别是控制什么的呢？下面我们就来讲讲；
 
 ### 失败策略(FailStrategy)
-失败策略主要是控制任务节点执行失败后（重试达到指定次数仍然失败）任务节点的状态，这个策略比较简单，只有两个，一个是`IGNORE`，一个是`PENDING`，如果用户设置为`IGNORE`，那么节点任务在执行失败后将会变为`ERROR`状态，否则将会变为`PENDING`状态，这两个状态在执行策略中是有区别的，后续执行策略中会讲；
+
+失败策略主要是控制任务节点执行失败后（重试达到指定次数仍然失败）任务节点的状态，这个策略比较简单，只有两个，一个是`IGNORE`，一个是`PENDING`，如果用户设置为`IGNORE`，那么节点任务在执行失败后将会变为`ERROR`
+状态，否则将会变为`PENDING`状态，这两个状态在执行策略中是有区别的，后续执行策略中会讲；
 
 ### 执行策略（ExecuteStrategy）
-执行策略是控制节点是否执行的，这个策略稍微复杂些，主要是复杂在有限集任务的处理上，对于有限集任务，因为允许一个任务节点有多个父任务（这里指的是直接父任务，间接父任务不算），所以子节点什么时候执行是一个复杂的事情；
 
+执行策略是控制节点是否执行的，这个策略稍微复杂些，主要是复杂在有限集任务的处理上，对于有限集任务，因为允许一个任务节点有多个父任务（这里指的是直接父任务，间接父任务不算），所以子节点什么时候执行是一个复杂的事情；
 
 目前系统有四个内置的执行策略，基本可以覆盖大多数场景，如果有需要，也可以自行实现，下面我们先讲下系统内置的四个执行策略；
 
 #### 1、SpecialParent
+
 子节点在指定的requestId的父级全部执行成功时才能执行，如果有一个指定的父节点`ERROR`或者`PENDING`，那么子节点将会`PENDING`；
 
 注意，使用该策略的时候要给任务节点设置`strategyContext`，值为父节点的requestId列表，多个requestId以英文逗号分割；
 
 #### 2、MinAmountParent
-当子节点对应的父节点执行成功数量达到我们的要求子节点就可以执行了，无需等待所有父节点执行完毕；如果已经确定满足不了这个条件，例如总共10个父任务，要求最少执行成功5个，结果其中6个已经失败了，那么此时已经明确确定满足不了我们的条件了，此时子节点将会pending；
 
+当子节点对应的父节点执行成功数量达到我们的要求子节点就可以执行了，无需等待所有父节点执行完毕；如果已经确定满足不了这个条件，例如总共10个父任务，要求最少执行成功5个，结果其中6个已经失败了，那么此时已经明确确定满足不了我们的条件了，此时子节点将会pending；
 
 注意，使用该策略的时候要给任务节点设置`strategyContext`，值为数字字符串，表示父节点最少要有多少个执行成功才能满足条件；
 
 #### 3、AllParentSuccess
-必须所有父节点执行成功才可执行，如果任意一个父节点执行error或者pending，那么节点会pending；
 
+必须所有父节点执行成功才可执行，如果任意一个父节点执行error或者pending，那么节点会pending；
 
 `strategyContext`要求为空；
 
 #### 1、AllParentFinish
-必须所有父节点执行完成才可执行，如果任意一个父节点pending，那么节点会pending，注意，这个不要求父节点必须是SUCCESS，父节点是ERROR也是可以校验通过的；
 
+必须所有父节点执行完成才可执行，如果任意一个父节点pending，那么节点会pending，注意，这个不要求父节点必须是SUCCESS，父节点是ERROR也是可以校验通过的；
 
 `strategyContext`要求为空；
 

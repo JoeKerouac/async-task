@@ -619,7 +619,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                     LocalDateTime execTime = pair.getValue();
                     LocalDateTime now = LocalDateTime.now();
 
-                    // 计算第一个任务需要等待的时间，使用 execTime - now
+                    // 计算now - execTime，判断第一个任务是否应该执行
                     waitTime = ChronoUnit.MILLIS.between(now, execTime);
 
                     // 如果等待时间小于等于0了，表示任务已经就绪了，直接返回即可

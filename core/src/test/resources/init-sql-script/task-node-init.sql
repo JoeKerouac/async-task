@@ -10,8 +10,8 @@ create table if not exists `task_node`
     `strategy_context` varchar(1000) not null,
     `max_retry`        int           not null,
     `id`               varchar(100)  not null,
-    `gmt_create_time`  datetime      not null,
-    `gmt_update_time`  datetime      not null,
+    `gmt_create_time`  datetime(6)   not null,
+    `gmt_update_time`  datetime(6)   not null,
     `ext_map`          varchar(2000),
     primary key (`id`)
 );
