@@ -333,26 +333,21 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         AsyncThreadPoolConfig threadPoolConfig = executorConfig.getThreadPoolConfig();
         workerThreads = new Thread[threadPoolConfig.getCorePoolSize()];
+        // 默认使用加载本类的class loader作为线程的上下文loader
+        ClassLoader loader = threadPoolConfig.getDefaultContextClassLoader() == null
+            ? DefaultAsyncTaskProcessorEngine.class.getClassLoader() : threadPoolConfig.getDefaultContextClassLoader();
+
         for (int i = 0; i < workerThreads.length; i++) {
             Thread thread = new Thread(() -> {
                 Thread currentThread = Thread.currentThread();
-                // 默认使用加载本类的class loader作为线程的上下文loader
-                ClassLoader loader = threadPoolConfig.getDefaultContextClassLoader() == null
-                    ? DefaultAsyncTaskProcessorEngine.class.getClassLoader()
-                    : threadPoolConfig.getDefaultContextClassLoader();
-
+                currentThread.setContextClassLoader(loader);
                 while (start) {
-                    currentThread.setContextClassLoader(loader);
-
                     try {
                         scheduler();
-                    } catch (InterruptedException e) {
-                        // 中断异常忽略
-                        if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug("异步任务工作线程收到中断消息，忽略该消息");
-                        }
                     } catch (Throwable throwable) {
-                        monitorService.uncaughtException(currentThread, throwable);
+                        if (start || !(throwable instanceof InterruptedException)) {
+                            monitorService.uncaughtException(currentThread, throwable);
+                        }
                     }
                 }
             }, StringUtils.getOrDefault(threadPoolConfig.getThreadName(), DEFAULT_THREAD_NAME) + "-" + i);
@@ -408,9 +403,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         LocalDateTime now = LocalDateTime.now();
 
         if (task.getExecTime().isAfter(now)) {
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", task, now);
-            }
+            // 理论上不会出现
+            LOGGER.warn("任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", task, now);
             // 将任务解锁，重新设置为READY状态
             task.setStatus(ExecStatus.READY);
             repository.update(taskRequestId, ExecStatus.READY, null, null, null, null);
