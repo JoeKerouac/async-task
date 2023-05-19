@@ -16,11 +16,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import com.github.joekerouac.common.tools.reflect.type.AbstractTypeReference;
-import com.github.joekerouac.common.tools.util.JsonUtil;
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.db.TypeHandler;
 import com.github.joekerouac.async.task.entity.common.ExtMap;
+import com.github.joekerouac.common.tools.reflect.type.AbstractTypeReference;
+import com.github.joekerouac.common.tools.string.StringUtils;
+import com.github.joekerouac.common.tools.util.JsonUtil;
 
 /**
  * @author JoeKerouac
@@ -36,8 +37,12 @@ public class ExtMapTypeHandler implements TypeHandler<ExtMap> {
 
     @Override
     public ExtMap getResult(final ResultSet rs, final int columnIndex, final Class<?> javaType) throws SQLException {
-        return JsonUtil.read(rs.getString(columnIndex).getBytes(Const.DEFAULT_CHARSET),
-            new AbstractTypeReference<ExtMap>() {});
+        String str = rs.getString(columnIndex);
+        if (StringUtils.isBlank(str)) {
+            return null;
+        }
+
+        return JsonUtil.read(str, new AbstractTypeReference<ExtMap>() {});
     }
 
 }

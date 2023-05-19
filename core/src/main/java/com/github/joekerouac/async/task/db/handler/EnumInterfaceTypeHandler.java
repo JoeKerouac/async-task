@@ -16,8 +16,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import com.github.joekerouac.common.tools.enums.EnumInterface;
 import com.github.joekerouac.async.task.db.TypeHandler;
+import com.github.joekerouac.common.tools.enums.EnumInterface;
+import com.github.joekerouac.common.tools.string.StringUtils;
 
 /**
  * @author JoeKerouac
@@ -35,6 +36,10 @@ public class EnumInterfaceTypeHandler implements TypeHandler<EnumInterface> {
     @Override
     public EnumInterface getResult(final ResultSet rs, final int columnIndex, final Class<?> javaType)
         throws SQLException {
-        return EnumInterface.getByCode(rs.getString(columnIndex), javaType);
+        String str = rs.getString(columnIndex);
+        if (StringUtils.isBlank(str)) {
+            return null;
+        }
+        return EnumInterface.getByCode(str, javaType);
     }
 }

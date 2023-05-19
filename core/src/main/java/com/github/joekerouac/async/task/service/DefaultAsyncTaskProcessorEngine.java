@@ -402,7 +402,10 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         // 如果此时任务还不能执行，则将任务重新加到队列中
         LocalDateTime now = LocalDateTime.now();
 
-        if (task.getExecTime().isAfter(now)) {
+        // 只计算到毫秒，与从内存中获取任务逻辑保持一致
+        long l = ChronoUnit.MILLIS.between(now, task.getExecTime());
+
+        if (l > 0) {
             // 理论上不会出现
             LOGGER.warn("任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", task, now);
             // 将任务解锁，重新设置为READY状态
