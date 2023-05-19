@@ -41,8 +41,13 @@ import com.github.joekerouac.common.tools.string.StringUtils;
  */
 public class LocalDateTimeTypeHandler implements TypeHandler<LocalDateTime> {
 
+    // 存储的时候只存储秒小数点后6位，因为MySQL也只能精确到后6位;
     private static final DateTimeFormatter FORMATTER = new DateTimeFormatterBuilder().appendPattern(DateUtil.BASE)
         .appendFraction(ChronoField.NANO_OF_SECOND, 0, 6, true).toFormatter();
+
+    // 解析，虽然我们只存储了小数点后6位，但是实际以字符串取出的时候会补全到9位
+    private static final DateTimeFormatter PARSER = new DateTimeFormatterBuilder().appendPattern(DateUtil.BASE)
+        .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true).toFormatter();
 
     @Override
     public void setParameter(final PreparedStatement ps, final int i, final LocalDateTime parameter)
@@ -57,6 +62,6 @@ public class LocalDateTimeTypeHandler implements TypeHandler<LocalDateTime> {
         if (StringUtils.isBlank(str)) {
             return null;
         }
-        return FORMATTER.parse(str, LocalDateTime::from);
+        return PARSER.parse(str, LocalDateTime::from);
     }
 }
