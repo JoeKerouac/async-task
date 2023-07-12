@@ -19,6 +19,7 @@ import com.github.joekerouac.async.task.exception.ProcessorAlreadyExistException
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.FlowTaskModel;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 
 /**
  * @author JoeKerouac
@@ -47,7 +48,7 @@ public interface FlowService {
      * @throws IllegalArgumentException
      *             如果要添加的processor为空则抛出该异常
      */
-    void addProcessor(@NotNull AbstractFlowProcessor<?> processor)
+    void addProcessor(@NotNull AbstractAsyncTaskProcessor<?> processor)
         throws ProcessorAlreadyExistException, IllegalArgumentException;
 
     /**
@@ -59,7 +60,7 @@ public interface FlowService {
      * @throws IllegalArgumentException
      *             如果要移除的processorName为空则抛出该异常
      */
-    AbstractFlowProcessor<?> removeProcessor(@NotBlank String processorName) throws IllegalArgumentException;
+    AbstractAsyncTaskProcessor<?> removeProcessor(@NotBlank String processorName) throws IllegalArgumentException;
 
     /**
      * 添加任务，如果当前存在事务，应该加入事务，如果当前没有事务，则创建事务并在事务中运行

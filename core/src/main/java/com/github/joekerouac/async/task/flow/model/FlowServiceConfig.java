@@ -22,7 +22,6 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
-import com.github.joekerouac.async.task.flow.AbstractFlowProcessor;
 import com.github.joekerouac.async.task.flow.impl.StrategyConst;
 import com.github.joekerouac.async.task.flow.impl.strategy.AllParentFinishExecuteStrategy;
 import com.github.joekerouac.async.task.flow.impl.strategy.AllParentSuccessExecuteStrategy;
@@ -33,8 +32,10 @@ import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
 import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.IDGenerator;
+import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.async.task.spi.TransactionHook;
 
 import lombok.CustomLog;
@@ -109,11 +110,16 @@ public class FlowServiceConfig {
     private ConnectionSelector connectionSelector;
 
     /**
+     * 任务处理器提供者，优先使用静态任务处理器，静态任务处理器不存在时尝试使用从该处理器提供者获取
+     */
+    private ProcessorSupplier processorSupplier;
+
+    /**
      * 所有任务处理器
      */
     @NotNull
     @SuppressWarnings("rawtypes")
-    private List<AbstractFlowProcessor> processors = new ArrayList<>();
+    private List<AbstractAsyncTaskProcessor> processors = new ArrayList<>();
 
     /**
      * 所有执行策略

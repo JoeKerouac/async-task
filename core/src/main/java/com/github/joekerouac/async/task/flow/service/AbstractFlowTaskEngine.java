@@ -19,12 +19,15 @@ import java.util.Map;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.db.TransUtil;
-import com.github.joekerouac.async.task.flow.AbstractFlowProcessor;
 import com.github.joekerouac.async.task.flow.enums.FailStrategy;
 import com.github.joekerouac.async.task.flow.enums.StrategyResult;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.TaskNode;
-import com.github.joekerouac.async.task.flow.spi.*;
+import com.github.joekerouac.async.task.flow.spi.ExecuteStrategy;
+import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
+import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
+import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
+import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TransStrategy;
@@ -77,7 +80,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     /**
      * 所有任务处理器
      */
-    protected final Map<String, AbstractFlowProcessor<?>> processors;
+    protected final Map<String, AbstractAsyncTaskProcessor<?>> processors;
 
     /**
      * 异步任务服务
@@ -218,7 +221,8 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         // 代理到用户的流式任务处理器上
         Map<String, Object> flowCache = (Map<String, Object>)cache.get(TASK_CACHE_CACHE_KEY);
         TaskNode taskNode = (TaskNode)cache.get(TASK_NODE_CACHE_KEY);
-        AbstractFlowProcessor<Object> processor = (AbstractFlowProcessor<Object>)cache.get(TASK_PROCESSOR_CACHE_KEY);
+        AbstractAsyncTaskProcessor<Object> processor =
+            (AbstractAsyncTaskProcessor<Object>)cache.get(TASK_PROCESSOR_CACHE_KEY);
         return processor == null || processor.canRetry(nodeRequestId, taskNode.getNodeData(), throwable, flowCache);
     }
 
@@ -229,7 +233,8 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         // 代理到用户的流式任务处理器上
         Map<String, Object> flowCache = (Map<String, Object>)cache.get(TASK_CACHE_CACHE_KEY);
         TaskNode taskNode = (TaskNode)cache.get(TASK_NODE_CACHE_KEY);
-        AbstractFlowProcessor<Object> processor = (AbstractFlowProcessor<Object>)cache.get(TASK_PROCESSOR_CACHE_KEY);
+        AbstractAsyncTaskProcessor<Object> processor =
+            (AbstractAsyncTaskProcessor<Object>)cache.get(TASK_PROCESSOR_CACHE_KEY);
         return processor == null ? super.nextExecTimeInterval(requestId, retry, nodeRequestId, cache)
             : processor.nextExecTimeInterval(nodeRequestId, retry, taskNode.getNodeData(), flowCache);
     }
@@ -260,8 +265,8 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
             cache.put(TASK_EXECUTE_FLAG_CACHE_KEY, Boolean.TRUE);
 
             @SuppressWarnings("unchecked")
-            AbstractFlowProcessor<Object> processor =
-                (AbstractFlowProcessor<Object>)processors.get(taskNode.getProcessor());
+            AbstractAsyncTaskProcessor<Object> processor =
+                (AbstractAsyncTaskProcessor<Object>)processors.get(taskNode.getProcessor());
             // 注意，找不到处理器时抛出异常，等待重试，因为可能时发布过程中的不兼容问题导致的，可能给个机会调度到最新代码的机器上就可以执行了
             Assert.notNull(processor,
                 StringUtils.format("任务 [{}] 对应的处理器 [{}] 不存在", nodeRequestId, taskNode.getProcessor()),
@@ -308,8 +313,8 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         // 如果本轮实际执行了任务，那么先修改任务状态为终态
         if (executeFlag == Boolean.TRUE) {
             @SuppressWarnings("unchecked")
-            AbstractFlowProcessor<Object> processor =
-                (AbstractFlowProcessor<Object>)cache.get(TASK_PROCESSOR_CACHE_KEY);
+            AbstractAsyncTaskProcessor<Object> processor =
+                (AbstractAsyncTaskProcessor<Object>)cache.get(TASK_PROCESSOR_CACHE_KEY);
 
             // 注意，processor为null时不调用用户的afterProcess，但是需要处理流式任务
             if (processor == null) {
@@ -443,7 +448,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     @Accessors(chain = true, fluent = true)
     public static class EngineConfig {
 
-        private Map<String, AbstractFlowProcessor<?>> processors;
+        private Map<String, AbstractAsyncTaskProcessor<?>> processors;
 
         private AsyncTaskService asyncTaskService;
 

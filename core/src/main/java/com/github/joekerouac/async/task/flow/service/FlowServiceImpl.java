@@ -14,7 +14,11 @@ package com.github.joekerouac.async.task.flow.service;
 
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,7 +28,6 @@ import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.exception.ProcessorAlreadyExistException;
-import com.github.joekerouac.async.task.flow.AbstractFlowProcessor;
 import com.github.joekerouac.async.task.flow.FlowService;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskType;
@@ -33,12 +36,20 @@ import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.impl.repository.FlowTaskRepositoryImpl;
 import com.github.joekerouac.async.task.flow.impl.repository.TaskNodeMapRepositoryImpl;
 import com.github.joekerouac.async.task.flow.impl.repository.TaskNodeRepositoryImpl;
-import com.github.joekerouac.async.task.flow.model.*;
+import com.github.joekerouac.async.task.flow.model.FlowServiceConfig;
+import com.github.joekerouac.async.task.flow.model.FlowTask;
+import com.github.joekerouac.async.task.flow.model.FlowTaskModel;
+import com.github.joekerouac.async.task.flow.model.SetTaskModel;
+import com.github.joekerouac.async.task.flow.model.StreamTaskModel;
+import com.github.joekerouac.async.task.flow.model.TaskNode;
+import com.github.joekerouac.async.task.flow.model.TaskNodeMap;
+import com.github.joekerouac.async.task.flow.model.TaskNodeModel;
 import com.github.joekerouac.async.task.flow.spi.ExecuteStrategy;
 import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
 import com.github.joekerouac.async.task.model.TransStrategy;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.TransactionCallback;
@@ -48,7 +59,11 @@ import com.github.joekerouac.common.tools.collection.Pair;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.db.SqlUtil;
 import com.github.joekerouac.common.tools.exception.ExceptionUtil;
-import com.github.joekerouac.common.tools.scheduler.*;
+import com.github.joekerouac.common.tools.scheduler.SchedulerSystem;
+import com.github.joekerouac.common.tools.scheduler.SchedulerSystemImpl;
+import com.github.joekerouac.common.tools.scheduler.SchedulerTask;
+import com.github.joekerouac.common.tools.scheduler.SimpleSchedulerTask;
+import com.github.joekerouac.common.tools.scheduler.TaskDescriptor;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.thread.NamedThreadFactory;
 import com.github.joekerouac.common.tools.thread.ThreadPoolConfig;
@@ -106,7 +121,7 @@ public class FlowServiceImpl implements FlowService {
     /**
      * 所有任务处理器
      */
-    private final Map<String, AbstractFlowProcessor<?>> processors;
+    private final Map<String, AbstractAsyncTaskProcessor<?>> processors;
 
     /**
      * 所有执行策略
@@ -152,7 +167,7 @@ public class FlowServiceImpl implements FlowService {
         taskNodeMapRepository = config.getTaskNodeMapRepository() == null
             ? new TaskNodeMapRepositoryImpl(connectionSelector) : config.getTaskNodeMapRepository();
         processors = new ConcurrentHashMap<>();
-        for (final AbstractFlowProcessor<?> processor : config.getProcessors()) {
+        for (final AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
             addProcessor(processor);
         }
 
@@ -239,7 +254,7 @@ public class FlowServiceImpl implements FlowService {
     }
 
     @Override
-    public void addProcessor(final AbstractFlowProcessor<?> processor) {
+    public void addProcessor(final AbstractAsyncTaskProcessor<?> processor) {
         Assert.notNull(processor, "要添加的processor不能为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Assert.assertTrue(processor.processors() != null && processor.processors().length > 0,
             StringUtils.format("处理器 [{}] 的处理器名(processors)返回了空", processor),
@@ -250,7 +265,7 @@ public class FlowServiceImpl implements FlowService {
                 StringUtils.format("处理器 [{}] 的处理器名(processors)中存在空的", processor),
                 ExceptionProviderConst.CodeErrorExceptionProvider);
 
-            AbstractFlowProcessor<?> old = processors.put(name, processor);
+            AbstractAsyncTaskProcessor<?> old = processors.put(name, processor);
             if (old != null) {
                 throw new ProcessorAlreadyExistException(
                     StringUtils.format("当前有两个叫 [{}] 的处理器，分别是：[{}, {}]", name, processor, old), old);
@@ -261,7 +276,7 @@ public class FlowServiceImpl implements FlowService {
     }
 
     @Override
-    public AbstractFlowProcessor<?> removeProcessor(final String processorName) {
+    public AbstractAsyncTaskProcessor<?> removeProcessor(final String processorName) {
         Assert.notBlank(processorName, "要移除的processorName不能为空",
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
         return processors.remove(processorName);
@@ -321,7 +336,8 @@ public class FlowServiceImpl implements FlowService {
             } catch (Throwable e) {
                 Throwable rootCause = ExceptionUtil.getRootCause(e);
                 // 如果是锁定异常，应该忽略
-                if (!(e instanceof SQLException) || SqlUtil.causeForUpdateNowaitError((SQLException)rootCause)) {
+                if (!(rootCause instanceof SQLException)
+                    || SqlUtil.causeForUpdateNowaitError((SQLException)rootCause)) {
                     // 如果这里因为网络抖动等导致异常，应该可以快速重试的，现在暂时没有处理
                     LOGGER.warn(e, "流式任务批量添加处理失败，等待下次处理");
                 }
@@ -685,7 +701,7 @@ public class FlowServiceImpl implements FlowService {
     private TaskNode build(TaskNodeModel model, IDGenerator idGenerator, String flowTaskRequestId) {
         String processorName =
             StringUtils.getOrDefault(model.getProcessor(), model.getData().getClass().getSimpleName());
-        AbstractFlowProcessor<?> processor = processors.get(processorName);
+        AbstractAsyncTaskProcessor<?> processor = processors.get(processorName);
         Assert.notNull(processor,
             StringUtils.format("任务 [{}:{}] 对应的处理器 [{}] 不存在", flowTaskRequestId, model.getRequestId(), processorName),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);

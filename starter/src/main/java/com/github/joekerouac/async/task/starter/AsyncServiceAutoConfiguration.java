@@ -75,19 +75,8 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public AsyncServiceConfig asyncServiceConfig(@Autowired AsyncServiceConfigModel asyncServiceConfigModel,
-        @Autowired AsyncTaskProcessorEngineFactory engineFactory, @Autowired AsyncTaskRepository asyncTaskRepository,
-        @Autowired IDGenerator asyncIdGenerator, @Autowired(required = false) TransactionHook transactionHook,
-        @Autowired(required = false) MonitorService monitorService,
-        @Autowired(required = false) TraceService traceService) {
-        LOGGER.debug("当前异步任务服务配置详情为： [{}:{}:{}:{}:{}]", asyncServiceConfigModel, asyncTaskRepository, asyncIdGenerator,
-            transactionHook, monitorService);
-
-        // processor懒加载，只有在第一次请求获取processor的时候才加载，尽量避免下面的循环引用场景 >>
-        // >> 业务bean -> AsyncTaskService -> Processor -> 业务bean
-        // processor懒加载后，Processor -> 业务bean这个依赖就会断开，循环依赖也会解决；PS：注意，如果有业务bean在bean init方法里边调用AsyncTaskService添加
-        // 任务的话会导致Processor提前加载，此时仍然有循环引用的风险；
-        ProcessorSupplier supplier = new ProcessorSupplier() {
+    public ProcessorSupplier processorSupplier() {
+        return new ProcessorSupplier() {
 
             volatile Map<String, AbstractAsyncTaskProcessor<?>> processors;
 
@@ -111,7 +100,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
 
             /**
              * 我们尽量只初始化单个processor，一般来说我们的processor都是processor name + 固定的Processor，所以这里都能搜索到，这样其他processor就不用提前初始化了
-             * 
+             *
              * @param processorName
              *            processor name
              * @param <T>
@@ -172,6 +161,18 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
             }
 
         };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AsyncServiceConfig asyncServiceConfig(@Autowired AsyncServiceConfigModel asyncServiceConfigModel,
+        @Autowired AsyncTaskProcessorEngineFactory engineFactory, @Autowired AsyncTaskRepository asyncTaskRepository,
+        @Autowired IDGenerator asyncIdGenerator, @Autowired(required = false) TransactionHook transactionHook,
+        @Autowired(required = false) MonitorService monitorService,
+        @Autowired(required = false) TraceService traceService,
+        @Autowired(required = false) ProcessorSupplier processorSupplier) {
+        LOGGER.debug("当前异步任务服务配置详情为： [{}:{}:{}:{}:{}]", asyncServiceConfigModel, asyncTaskRepository, asyncIdGenerator,
+            transactionHook, monitorService);
 
         AsyncServiceConfig config = new AsyncServiceConfig();
         config.setRepository(asyncTaskRepository);
@@ -179,7 +180,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         config.setTransactionHook(transactionHook);
         config.setMonitorService(monitorService);
         config.setTraceService(traceService);
-        config.setProcessorSupplier(supplier);
+        config.setProcessorSupplier(processorSupplier);
         config.setDefaultExecutorConfig(convert(asyncServiceConfigModel.getDefaultExecutorConfig()));
         config.setEngineFactory(engineFactory);
 
