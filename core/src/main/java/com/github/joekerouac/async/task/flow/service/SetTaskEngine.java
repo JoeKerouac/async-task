@@ -65,7 +65,7 @@ public class SetTaskEngine extends AbstractFlowTaskEngine {
     @Override
     protected void notifyPending(final TaskNode notifyNode, final TaskNode pendingNode) {
         // 将任务节点设置为PENDING，然后唤醒该节点，然后执行的时候会发现节点是pending状态，会直接进入
-        int updateResult = taskNodeRepository.casUpdateStatus(pendingNode.getTaskRequestId(), pendingNode.getStatus(),
+        int updateResult = taskNodeRepository.casUpdateStatus(pendingNode.getRequestId(), pendingNode.getStatus(),
             TaskNodeStatus.PENDING);
         // 如果更新失败，则从内存刷新
         if (updateResult <= 0) {

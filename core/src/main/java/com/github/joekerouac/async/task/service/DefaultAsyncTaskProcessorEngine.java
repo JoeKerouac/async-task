@@ -229,6 +229,10 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             Pair<String, LocalDateTime> oldFirst = queue.isEmpty() ? null : queue.first();
 
             for (final AsyncTask task : tasks) {
+                if (task.getStatus() != ExecStatus.READY) {
+                    LOGGER.debug("当前任务状态不是READY，无需添加到内存队列, task: [{}]", task);
+                    continue;
+                }
                 // 这里兜底确保任务没有添加过；PS：其实就算任务添加过，后续执行中还会有检查，问题不大
                 if (!this.queue.add(new Pair<>(task.getRequestId(), task.getExecTime())) && LOGGER.isDebugEnabled()) {
                     LOGGER.debug("任务 [{}] 已经在队列中了，忽略该任务", task);

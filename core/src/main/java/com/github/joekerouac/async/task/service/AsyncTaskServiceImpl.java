@@ -337,7 +337,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
         // 当前仍然在事务上下文中，那么我们就要判断当前事务上下文是否是我们执行sql时的事务上下文了，如果是，则需要等待事务结束后才能执行回调
         // 否则直接执行回调即可
-        boolean needWait;
+        boolean needRunAfterTransaction;
 
         switch (strategy) {
             case REQUIRED:
@@ -345,7 +345,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
                 // 如果当前还有事务，说明之前就有事务，我们是加入的事务，我们需要在事务执行完毕后执行
             case MANDATORY:
                 // mandatory表示当前肯定是加入事务的
-                needWait = true;
+                needRunAfterTransaction = true;
                 break;
             case REQUIRES_NEW:
                 // 开启了新事务，此时就算有事务，也不是我们的事务了
@@ -353,13 +353,13 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
                 // 以非事务的方式运行，肯定不是我们的事务
             case NEVER:
                 // 以非事务的方式运行，肯定不是我们的事务
-                needWait = false;
+                needRunAfterTransaction = false;
                 break;
             default:
                 throw new UnsupportedOperationException(StringUtils.format("不支持的事务策略：[{}]", strategy));
         }
 
-        if (needWait) {
+        if (needRunAfterTransaction) {
             LOGGER.debug("当前在事务中，等待事务提交后将任务提交到任务执行引擎");
             transactionHook.registerCallback(new TransactionCallback() {
                 @Override
