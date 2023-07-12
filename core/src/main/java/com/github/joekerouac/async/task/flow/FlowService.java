@@ -109,4 +109,6 @@ public interface FlowService {
     TaskNodeStatus queryNodeStatus(@NotBlank String nodeRequestId)
         throws IllegalArgumentException, IllegalStateException;
 
+    void notifyNode(String nodeRequestId);
+
 }

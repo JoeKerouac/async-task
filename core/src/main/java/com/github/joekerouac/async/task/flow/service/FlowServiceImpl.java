@@ -322,6 +322,12 @@ public class FlowServiceImpl implements FlowService {
         });
     }
 
+    @Override
+    public void notifyNode(String nodeRequestId) {
+
+        asyncTaskService.notifyTask(nodeRequestId);
+    }
+
     /**
      * 注册流式任务构建任务
      *
@@ -506,7 +512,6 @@ public class FlowServiceImpl implements FlowService {
             /*
              * 1、如果主任务已经存在，那么锁定，否则创建
              */
-            // 如果第一个任务ID一致，那么表示
             boolean createFlow = false;
             FlowTask taskFromDB = flowTaskRepository.selectForLock(streamId);
             if (taskFromDB == null) {

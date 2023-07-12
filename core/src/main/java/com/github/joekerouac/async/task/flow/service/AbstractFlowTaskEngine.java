@@ -260,6 +260,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
 
         // READY表示异步任务就绪后还从未执行过，RUNNING表示异步任务已经执行了，但是可能中途被中断了，中断后用户又重新修改异步任务状态将其调起
         // 了，或者是任务重试了，其他状态表示当前已经执行完毕，就无需在执行了
+        ExecResult execResult = ExecResult.SUCCESS;
         if (taskNode.getStatus() == TaskNodeStatus.READY || taskNode.getStatus() == TaskNodeStatus.RUNNING) {
             // 注意，flag要放在最前边，防止其他语句执行异常导致放入失败导致后续判断错误
             cache.put(TASK_EXECUTE_FLAG_CACHE_KEY, Boolean.TRUE);
@@ -284,10 +285,10 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
             }
 
             // 处理任务，注意，这里可能有异常，不过我们不用处理，等待异步任务框架处理重试即可
-            processor.process(nodeRequestId, data, flowCache);
+            execResult = processor.process(nodeRequestId, data, flowCache);
         }
 
-        return ExecResult.SUCCESS;
+        return execResult;
     }
 
     @Override
