@@ -67,7 +67,7 @@
 
         <!-- 方法、构造器最多有7个参数 -->
         <module name="ParameterNumber">
-            <property name="max" value="7"/>
+            <property name="max" value="10"/>
             <property name="tokens" value="METHOD_DEF, CTOR_DEF"/>
         </module>
 

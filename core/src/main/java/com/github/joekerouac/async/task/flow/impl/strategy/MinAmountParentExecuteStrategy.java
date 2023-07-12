@@ -55,7 +55,7 @@ public class MinAmountParentExecuteStrategy extends AbstractExecuteStrategy {
         }
         try {
             int count = Integer.parseInt(context);
-            return count > 0 && count <= parents.size();
+            return count >= 0 && count <= parents.size();
         } catch (Throwable throwable) {
             return false;
         }

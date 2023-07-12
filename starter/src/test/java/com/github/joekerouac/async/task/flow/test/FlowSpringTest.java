@@ -14,6 +14,7 @@ package com.github.joekerouac.async.task.flow.test;
 
 import java.util.Collections;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,23 +55,108 @@ public class FlowSpringTest extends AbstractTestNGSpringContextTests {
      */
     @Test
     public void setTaskBaseTest() throws Exception {
-        SetTaskModel model = new SetTaskModel();
-        model.setRequestId(UUID.randomUUID().toString());
-        TaskNodeModel nodeModel0 = buildTest("JoeKerouac1", 1);
-        TaskNodeModel nodeModel1 = buildTest("JoeKerouac2", 2);
+        {
+            // 第一个任务执行失败时忽略，并且第二个任务在第一个任务执行结束后不关心结果，此时可以正常执行第二个任务
+            processor.setLatch(new CountDownLatch(2));
+            processor.contexts.clear();
+            SetTaskModel model = new SetTaskModel();
+            model.setRequestId(UUID.randomUUID().toString());
+            TaskNodeModel nodeModel0 =
+                buildTest("JoeKerouac1", 1, FailStrategy.IGNORE, StrategyConst.ALL_PARENT_FINISH, null);
+            TaskNodeModel nodeModel1 =
+                buildTest("JoeKerouac2", 2, FailStrategy.PENDING, StrategyConst.ALL_PARENT_FINISH, null);
 
-        nodeModel0.setAllChild(Collections.singletonList(nodeModel1));
-        model.setFirstTask(nodeModel0);
-        model.setLastTask(nodeModel1);
-        flowService.addTask(model);
+            nodeModel0.setAllChild(Collections.singletonList(nodeModel1));
+            model.setFirstTask(nodeModel0);
+            model.setLastTask(nodeModel1);
+            flowService.addTask(model);
 
-        Assert.assertTrue(processor.latch.await(3, TimeUnit.SECONDS));
-        Assert.assertEquals(processor.contexts.size(), 2);
+            Assert.assertTrue(processor.latch.await(3, TimeUnit.SECONDS));
+            Assert.assertEquals(processor.contexts.size(), 2);
 
-        // 校验执行顺序
-        for (int i = 0; i < processor.contexts.size(); i++) {
-            Assert.assertEquals(processor.contexts.get(i).getId(), i + 1);
+            // 校验执行顺序
+            for (int i = 0; i < processor.contexts.size(); i++) {
+                Assert.assertEquals(processor.contexts.get(i).getId(), i + 1);
+            }
         }
+
+        {
+            // 第一个任务执行失败时挂起，此时第一个任务失败无法正常执行第二个任务
+            processor.setLatch(new CountDownLatch(2));
+            processor.contexts.clear();
+            SetTaskModel model = new SetTaskModel();
+            model.setRequestId(UUID.randomUUID().toString());
+            TaskNodeModel nodeModel0 =
+                buildTest("JoeKerouac1", 1, FailStrategy.PENDING, StrategyConst.ALL_PARENT_FINISH, null);
+            TaskNodeModel nodeModel1 =
+                buildTest("JoeKerouac2", 2, FailStrategy.PENDING, StrategyConst.ALL_PARENT_FINISH, null);
+
+            nodeModel0.setAllChild(Collections.singletonList(nodeModel1));
+            model.setFirstTask(nodeModel0);
+            model.setLastTask(nodeModel1);
+            flowService.addTask(model);
+
+            Assert.assertFalse(processor.latch.await(3, TimeUnit.SECONDS));
+            Assert.assertEquals(processor.latch.getCount(), 1);
+            Assert.assertEquals(processor.contexts.size(), 1);
+
+            // 校验执行顺序
+            for (int i = 0; i < processor.contexts.size(); i++) {
+                Assert.assertEquals(processor.contexts.get(i).getId(), i + 1);
+            }
+        }
+
+        {
+            // 第一个任务执行失败时忽略，并且第二个任务要求第一个任务执行必须成功，此时第一个任务失败无法正常执行第二个任务
+            processor.setLatch(new CountDownLatch(2));
+            processor.contexts.clear();
+            SetTaskModel model = new SetTaskModel();
+            model.setRequestId(UUID.randomUUID().toString());
+            TaskNodeModel nodeModel0 =
+                buildTest("JoeKerouac1", 1, FailStrategy.IGNORE, StrategyConst.ALL_PARENT_FINISH, null);
+            TaskNodeModel nodeModel1 =
+                buildTest("JoeKerouac2", 2, FailStrategy.PENDING, StrategyConst.ALL_PARENT_SUCCESS_STRATEGY, null);
+
+            nodeModel0.setAllChild(Collections.singletonList(nodeModel1));
+            model.setFirstTask(nodeModel0);
+            model.setLastTask(nodeModel1);
+            flowService.addTask(model);
+
+            Assert.assertFalse(processor.latch.await(3, TimeUnit.SECONDS));
+            Assert.assertEquals(processor.latch.getCount(), 1);
+            Assert.assertEquals(processor.contexts.size(), 1);
+
+            // 校验执行顺序
+            for (int i = 0; i < processor.contexts.size(); i++) {
+                Assert.assertEquals(processor.contexts.get(i).getId(), i + 1);
+            }
+        }
+
+        {
+            // 第一个任务执行失败时忽略，并且第二个任务要求0个父任务执行成功，此时第一个任务失败可以正常执行第二个任务
+            processor.setLatch(new CountDownLatch(2));
+            processor.contexts.clear();
+            SetTaskModel model = new SetTaskModel();
+            model.setRequestId(UUID.randomUUID().toString());
+            TaskNodeModel nodeModel0 =
+                buildTest("JoeKerouac1", 1, FailStrategy.IGNORE, StrategyConst.ALL_PARENT_FINISH, null);
+            TaskNodeModel nodeModel1 =
+                buildTest("JoeKerouac2", 2, FailStrategy.PENDING, StrategyConst.MIN_AMOUNT_PARENT_STRATEGY, "0");
+
+            nodeModel0.setAllChild(Collections.singletonList(nodeModel1));
+            model.setFirstTask(nodeModel0);
+            model.setLastTask(nodeModel1);
+            flowService.addTask(model);
+
+            Assert.assertTrue(processor.latch.await(3, TimeUnit.SECONDS));
+            Assert.assertEquals(processor.contexts.size(), 2);
+
+            // 校验执行顺序
+            for (int i = 0; i < processor.contexts.size(); i++) {
+                Assert.assertEquals(processor.contexts.get(i).getId(), i + 1);
+            }
+        }
+
     }
 
     /**
@@ -80,14 +166,22 @@ public class FlowSpringTest extends AbstractTestNGSpringContextTests {
      *            name
      * @param id
      *            age
+     * @param failStrategy
+     *            失败时的策略
+     * @param executeStrategy
+     *            本节点执行时的要求
+     * @param strategyContext
+     *            strategyContext
      * @return 任务节点
      */
-    private TaskNodeModel buildTest(String context, int id) {
+    private TaskNodeModel buildTest(String context, int id, FailStrategy failStrategy, String executeStrategy,
+        String strategyContext) {
         TaskNodeModel model = new TaskNodeModel();
         model.setRequestId(UUID.randomUUID().toString());
         model.setData(new SpringTask(context, id));
-        model.setFailStrategy(FailStrategy.PENDING);
-        model.setExecuteStrategy(StrategyConst.ALL_PARENT_FINISH);
+        model.setFailStrategy(failStrategy);
+        model.setExecuteStrategy(executeStrategy);
+        model.setStrategyContext(strategyContext);
         return model;
     }
 

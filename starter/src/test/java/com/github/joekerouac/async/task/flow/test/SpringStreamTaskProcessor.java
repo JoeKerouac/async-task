@@ -19,8 +19,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CountDownLatch;
 
-import com.github.joekerouac.async.task.flow.AbstractFlowProcessor;
 import com.github.joekerouac.async.task.model.ExecResult;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.starter.annotations.AsyncTaskProcessor;
 
 /**
@@ -29,18 +29,21 @@ import com.github.joekerouac.async.task.starter.annotations.AsyncTaskProcessor;
  * @since 1.0.0
  */
 @AsyncTaskProcessor
-public class SpringStreamTaskProcessor extends AbstractFlowProcessor<SpringTask> {
+public class SpringStreamTaskProcessor extends AbstractAsyncTaskProcessor<SpringTask> {
 
-    public final CountDownLatch latch;
+    public volatile CountDownLatch latch;
 
     public final List<SpringTask> contexts;
 
     private final Set<String> exec;
 
     public SpringStreamTaskProcessor() {
-        this.latch = new CountDownLatch(2);
         this.exec = new ConcurrentSkipListSet<>();
         this.contexts = new ArrayList<>();
+    }
+
+    public void setLatch(CountDownLatch latch) {
+        this.latch = latch;
     }
 
     @Override

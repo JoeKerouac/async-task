@@ -52,6 +52,7 @@ import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.IDGenerator;
+import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.async.task.spi.TransactionCallback;
 import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
@@ -119,6 +120,11 @@ public class FlowServiceImpl implements FlowService {
     private final TaskNodeMapRepository taskNodeMapRepository;
 
     /**
+     * 任务处理器提供
+     */
+    private final ProcessorSupplier processorSupplier;
+
+    /**
      * 所有任务处理器
      */
     private final Map<String, AbstractAsyncTaskProcessor<?>> processors;
@@ -167,6 +173,7 @@ public class FlowServiceImpl implements FlowService {
         taskNodeMapRepository = config.getTaskNodeMapRepository() == null
             ? new TaskNodeMapRepositoryImpl(connectionSelector) : config.getTaskNodeMapRepository();
         processors = new ConcurrentHashMap<>();
+        processorSupplier = config.getProcessorSupplier();
         for (final AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
             addProcessor(processor);
         }
@@ -707,6 +714,12 @@ public class FlowServiceImpl implements FlowService {
         String processorName =
             StringUtils.getOrDefault(model.getProcessor(), model.getData().getClass().getSimpleName());
         AbstractAsyncTaskProcessor<?> processor = processors.get(processorName);
+        if (processor == null && processorSupplier != null) {
+            processor = processorSupplier.get(processorName);
+            if (processor != null) {
+                addProcessor(processor);
+            }
+        }
         Assert.notNull(processor,
             StringUtils.format("任务 [{}:{}] 对应的处理器 [{}] 不存在", flowTaskRequestId, model.getRequestId(), processorName),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);

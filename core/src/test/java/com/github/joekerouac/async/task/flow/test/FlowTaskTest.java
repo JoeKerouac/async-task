@@ -28,8 +28,6 @@ import org.testng.annotations.AfterSuite;
 import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.Test;
 
-import com.github.joekerouac.common.tools.thread.ThreadUtil;
-import com.github.joekerouac.async.task.flow.AbstractFlowProcessor;
 import com.github.joekerouac.async.task.flow.FlowService;
 import com.github.joekerouac.async.task.flow.enums.FailStrategy;
 import com.github.joekerouac.async.task.flow.impl.StrategyConst;
@@ -41,7 +39,9 @@ import com.github.joekerouac.async.task.flow.service.FlowServiceImpl;
 import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
 import com.github.joekerouac.async.task.impl.SimpleConnectionSelector;
 import com.github.joekerouac.async.task.model.ExecResult;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.test.TestEngine;
+import com.github.joekerouac.common.tools.thread.ThreadUtil;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -286,7 +286,7 @@ public class FlowTaskTest extends TestEngine {
         private int id;
     }
 
-    private static class TestTaskFlowProcessor extends AbstractFlowProcessor<TestTask> {
+    private static class TestTaskFlowProcessor extends AbstractAsyncTaskProcessor<TestTask> {
 
         private final CountDownLatch latch;
 
