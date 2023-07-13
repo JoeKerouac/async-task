@@ -186,7 +186,8 @@ public class FlowServiceImpl implements FlowService {
             AbstractFlowTaskEngine.EngineConfig.builder().processors(processors).asyncTaskService(asyncTaskService)
                 .flowMonitorService(config.getFlowMonitorService()).flowTaskRepository(flowTaskRepository)
                 .taskNodeRepository(taskNodeRepository).taskNodeMapRepository(taskNodeMapRepository)
-                .executeStrategies(executeStrategies).transactionManager(transactionManager).build();
+                .executeStrategies(executeStrategies).transactionManager(transactionManager)
+                .processorSupplier(processorSupplier).build();
 
         streamTaskEngine = new StreamTaskEngine(engineConfig, schedulerSystem);
 

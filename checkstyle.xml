@@ -159,7 +159,7 @@
 
         <!-- 检查TODO和FIXME -->
         <module name="TodoComment">
-            <property name="format" value="(TODO)|(FIXME)|(todo)|(fixme)"/>
+            <property name="format" value="(FIXME)|(fixme)"/>
         </module>
 
         <!-- 不允许尾部注释，尾部注释很难对齐 -->

@@ -32,6 +32,7 @@ import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
+import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
@@ -82,6 +83,11 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     protected final Map<String, AbstractAsyncTaskProcessor<?>> processors;
 
     /**
+     * 任务处理器提供
+     */
+    protected final ProcessorSupplier processorSupplier;
+
+    /**
      * 异步任务服务
      */
     protected final AsyncTaskService asyncTaskService;
@@ -125,6 +131,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         this.taskNodeMapRepository = config.taskNodeMapRepository;
         this.executeStrategies = config.executeStrategies;
         this.transactionManager = config.transactionManager;
+        this.processorSupplier = config.processorSupplier;
     }
 
     /**
@@ -269,6 +276,12 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
             @SuppressWarnings("unchecked")
             AbstractAsyncTaskProcessor<Object> processor =
                 (AbstractAsyncTaskProcessor<Object>)processors.get(taskNode.getProcessor());
+
+            // TODO 待优化
+            if (processor == null && processorSupplier != null) {
+                processor = processorSupplier.get(taskNode.getProcessor());
+            }
+
             // 注意，找不到处理器时抛出异常，等待重试，因为可能时发布过程中的不兼容问题导致的，可能给个机会调度到最新代码的机器上就可以执行了
             Assert.notNull(processor,
                 StringUtils.format("任务 [{}] 对应的处理器 [{}] 不存在", nodeRequestId, taskNode.getProcessor()),
@@ -465,6 +478,8 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         private Map<String, ExecuteStrategy> executeStrategies;
 
         private AsyncTransactionManager transactionManager;
+
+        private ProcessorSupplier processorSupplier;
     }
 
 }
