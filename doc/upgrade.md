@@ -38,4 +38,5 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 - 修复`com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor.nextExecTimeInterval`这里的潜在数组越界问题；
 - 修复潜在BUG：原任务表中的`exec_time`定义类型`datetime`，默认不包含毫秒，当我们插入的时间包含毫秒时，该时间将会自动把毫秒四舍五入到秒上，有可能导致时间插入数据库后变小或者变大，如果变小几乎无影响，但是一旦时间变大，执行任务时由于会重新从数据库加载任务，此时加载出来的时间是变大了的，此时会兜底判断任务是否到执行时间，这就会导致我们认为该任务并不到执行时间，最终导致该任务被丢弃（没有重新入队列），一直到下次从数据库捞取任务时才会捞起执行，导致任务执行变慢；
 - 优化数据库类型解析器；
-
+- 优化流式任务，原流式任务子任务的执行结果处理有问题，无论返回什么都认为是SUCCESS，修改逻辑，子任务执行结果返回什么，实际代理执行的异步任务就返回什么；
+- 优化流式任务，FlowService增加节点唤醒能力；
