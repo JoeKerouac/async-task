@@ -43,11 +43,6 @@ public class SpringJdbcTransactionHook implements TransactionHook {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 
             @Override
-            public void flush() {
-                callback.flush();
-            }
-
-            @Override
             public void beforeCommit(final boolean readOnly) {
                 callback.beforeCommit(readOnly);
             }

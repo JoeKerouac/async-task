@@ -31,6 +31,7 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
+import com.github.joekerouac.async.task.db.AsyncTransactionManagerImpl;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
@@ -39,7 +40,8 @@ import com.github.joekerouac.async.task.service.DefaultAsyncTaskProcessorEngineF
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngineFactory;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
+import com.github.joekerouac.async.task.spi.ConnectionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.ProcessorSupplier;
@@ -167,17 +169,17 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
     @ConditionalOnMissingBean
     public AsyncServiceConfig asyncServiceConfig(@Autowired AsyncServiceConfigModel asyncServiceConfigModel,
         @Autowired AsyncTaskProcessorEngineFactory engineFactory, @Autowired AsyncTaskRepository asyncTaskRepository,
-        @Autowired IDGenerator asyncIdGenerator, @Autowired(required = false) TransactionHook transactionHook,
+        @Autowired IDGenerator asyncIdGenerator, @Autowired AsyncTransactionManager asyncTransactionManager,
         @Autowired(required = false) MonitorService monitorService,
         @Autowired(required = false) TraceService traceService,
         @Autowired(required = false) ProcessorSupplier processorSupplier) {
         LOGGER.debug("当前异步任务服务配置详情为： [{}:{}:{}:{}:{}]", asyncServiceConfigModel, asyncTaskRepository, asyncIdGenerator,
-            transactionHook, monitorService);
+            asyncTransactionManager, monitorService);
 
         AsyncServiceConfig config = new AsyncServiceConfig();
         config.setRepository(asyncTaskRepository);
+        config.setTransactionManager(asyncTransactionManager);
         config.setIdGenerator(asyncIdGenerator);
-        config.setTransactionHook(transactionHook);
         config.setMonitorService(monitorService);
         config.setTraceService(traceService);
         config.setProcessorSupplier(processorSupplier);
@@ -219,11 +221,11 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public AsyncTaskRepository asyncTaskRepository(@Autowired ConnectionSelector connectionSelector) {
-        LOGGER.info("使用默认异步任务仓库，当前connectionSelector： [{}]", connectionSelector);
+    public AsyncTaskRepository asyncTaskRepository(@Autowired AsyncTransactionManager transactionManager) {
+        LOGGER.info("使用默认异步任务仓库，当前connectionSelector： [{}]", transactionManager);
         // 注意：如果当前是单数据源场景下可以这么使用，如果是多数据源，则需要自行实现该逻辑
         // 注意：该数据源需要是async task表所在的数据源
-        return new AsyncTaskRepositoryImpl(connectionSelector);
+        return new AsyncTaskRepositoryImpl(transactionManager);
     }
 
     @Bean
@@ -239,7 +241,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnClass(name = {"org.springframework.jdbc.datasource.DataSourceUtils"})
-    public ConnectionSelector connectionSelector(@Autowired AsyncServiceConfigModel model) throws Throwable {
+    public ConnectionManager connectionManager(@Autowired AsyncServiceConfigModel model) throws Throwable {
         // 只有用户没有提供 ConnectionSelector 这个bean才会走到这里，现在我们获取用户指定的数据源来构建 ConnectionSelector
         DataSource dataSource;
         if (StringUtils.isNotBlank(model.getDataSource())) {
@@ -248,9 +250,16 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
             dataSource = context.getBean(DataSource.class);
         }
 
-        return (ConnectionSelector)Class
-            .forName("com.github.joekerouac.async.task.starter.impl.SpringJdbcConnectionSelector")
+        return (ConnectionManager)Class
+            .forName("com.github.joekerouac.async.task.starter.impl.SpringJdbcConnectionManager")
             .getConstructor(DataSource.class).newInstance(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AsyncTransactionManager asyncTransactionManager(@Autowired ConnectionManager connectionManager,
+        @Autowired(required = false) TransactionHook transactionHook) {
+        return new AsyncTransactionManagerImpl(connectionManager, transactionHook);
     }
 
 }

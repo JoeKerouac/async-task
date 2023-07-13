@@ -202,7 +202,7 @@ async:
       load-interval: 5000
       # 触发定时监控的时间间隔，单位毫秒
       monitor-interval: 5000
-      # 数据源名称，如果系统没有提供{@link com.github.joekerouac.async.task.spi.ConnectionSelector ConnectionSelector}这个bean，则需要提供数据源的名称
+      # 数据源名称，如果系统没有提供{@link com.github.joekerouac.async.task.spi.ConnectionManager ConnectionManager}这个bean，则需要提供数据源的名称
       data-source: "asyncDataSource"
       # 实际执行任务的线程池配置
       thread-pool-config:

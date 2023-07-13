@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
-import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.flow.enums.FailStrategy;
 import com.github.joekerouac.async.task.flow.enums.StrategyResult;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
@@ -32,7 +31,7 @@ import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
@@ -113,8 +112,9 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     protected final Map<String, ExecuteStrategy> executeStrategies;
 
     /**
-     * 链接选择器
+     * 事务管理器
      */
+    protected final AsyncTransactionManager transactionManager;
 
     public AbstractFlowTaskEngine(EngineConfig config) {
         this.processors = config.processors;
@@ -124,6 +124,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         this.taskNodeRepository = config.taskNodeRepository;
         this.taskNodeMapRepository = config.taskNodeMapRepository;
         this.executeStrategies = config.executeStrategies;
+        this.transactionManager = config.transactionManager;
     }
 
     /**
@@ -428,7 +429,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
                     break;
                 case RUNNING:
                     // 注意，这里一定要用事务，因为如果节点状态修改成功，但是异步任务唤醒失败时会导致异步任务永远不会有唤醒的机会了
-                    TransUtil.run(TransStrategy.REQUIRED, () -> {
+                    transactionManager.runWithTrans(TransStrategy.REQUIRED, () -> {
                         // 将节点状态从wait修改为ready，这里修改失败不用管，可能是当前待唤醒节点已经处理过了
                         taskNodeRepository.casUpdateStatus(wakeUpNode.getRequestId(), TaskNodeStatus.WAIT,
                             TaskNodeStatus.READY);
@@ -463,7 +464,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
 
         private Map<String, ExecuteStrategy> executeStrategies;
 
-        private ConnectionSelector connectionSelector;
+        private AsyncTransactionManager transactionManager;
     }
 
 }

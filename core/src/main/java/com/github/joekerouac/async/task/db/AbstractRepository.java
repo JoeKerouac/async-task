@@ -22,25 +22,20 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 
-import javax.sql.DataSource;
-import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
+import com.github.joekerouac.async.task.exception.AsyncTaskExceptionProviderConst;
+import com.github.joekerouac.async.task.exception.DBException;
+import com.github.joekerouac.async.task.exception.SystemException;
+import com.github.joekerouac.async.task.function.SqlRunner;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
+import com.github.joekerouac.async.task.spi.TableNameSelector;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.reflect.AccessorUtil;
 import com.github.joekerouac.common.tools.reflect.ReflectUtil;
 import com.github.joekerouac.common.tools.reflect.type.JavaTypeUtil;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
-import com.github.joekerouac.async.task.exception.AsyncTaskExceptionProviderConst;
-import com.github.joekerouac.async.task.exception.DBException;
-import com.github.joekerouac.async.task.exception.SystemException;
-import com.github.joekerouac.async.task.function.SqlRunner;
-import com.github.joekerouac.async.task.impl.SimpleConnectionSelector;
-import com.github.joekerouac.async.task.model.TransStrategy;
-import com.github.joekerouac.async.task.service.TransactionSynchronizationManager;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
-import com.github.joekerouac.async.task.spi.TableNameSelector;
 
 import lombok.CustomLog;
 
@@ -58,9 +53,9 @@ public abstract class AbstractRepository {
     private static final int BATCH_INSERT_SIZE = 100;
 
     /**
-     * connection选择器，允许用户选择当前使用那个connection，这样用户就有机会来做分库分表
+     * 事务管理器
      */
-    private ConnectionSelector connectionSelector;
+    private AsyncTransactionManager transactionManager;
 
     /**
      * 表名选择器，允许用户选择当前使用哪个表，这样用户就有机会来做分库分表
@@ -79,20 +74,14 @@ public abstract class AbstractRepository {
 
     private String insert;
 
-    public AbstractRepository(@NotNull DataSource dataSource, @NotBlank String tableName, @NotNull Class<?> modelType) {
-        Assert.notNull(dataSource, "数据源不能为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
-        Assert.notBlank(tableName, "表名不能为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
-        init(new SimpleConnectionSelector(dataSource), req -> tableName, modelType);
+    public AbstractRepository(@NotNull final AsyncTransactionManager transactionManager,
+        @NotNull final TableNameSelector tableNameSelector, Class<?> modelType) {
+        init(transactionManager, tableNameSelector, modelType);
     }
 
-    public AbstractRepository(@NotNull final ConnectionSelector connectionSelector,
+    protected void init(@NotNull final AsyncTransactionManager transactionManager,
         @NotNull final TableNameSelector tableNameSelector, Class<?> modelType) {
-        init(connectionSelector, tableNameSelector, modelType);
-    }
-
-    protected void init(@NotNull final ConnectionSelector connectionSelector,
-        @NotNull final TableNameSelector tableNameSelector, Class<?> modelType) {
-        this.connectionSelector = connectionSelector;
+        this.transactionManager = transactionManager;
         this.tableNameSelector = tableNameSelector;
         this.modelType = modelType;
         this.fieldMap = new LinkedHashMap<>();
@@ -147,12 +136,8 @@ public abstract class AbstractRepository {
         Assert.notBlank(tableName, StringUtils.format("当前表名获取为空，当前requestId: [{}]", requestId),
             ExceptionProviderConst.IllegalStateExceptionProvider);
 
-        // 获取当前事务策略
-        TransStrategy transStrategy = TransactionSynchronizationManager.getTransStrategy();
-        transStrategy = transStrategy == null ? TransStrategy.DEFAULT : transStrategy;
-
         try {
-            return connectionSelector.runWithTrans(requestId, transStrategy, connection -> {
+            return transactionManager.run(requestId, connection -> {
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("当前sqlTemplate：[{}], 当前requestId: [{}] ,当前表名为：[{}], 当前数据源为: [{}]", sqlTemplate,
                         requestId, tableName, connection);
@@ -224,13 +209,6 @@ public abstract class AbstractRepository {
      * @return 插入成功数量
      */
     protected <T> int batchInsert(String requestId, List<T> models) {
-        TransStrategy currentTransStrategy = TransactionSynchronizationManager.getTransStrategy();
-        Assert.assertTrue(
-            models.size() <= 1
-                || (currentTransStrategy == TransStrategy.REQUIRED || currentTransStrategy == TransStrategy.MANDATORY
-                    || currentTransStrategy == TransStrategy.REQUIRES_NEW),
-            StringUtils.format("当前事务设置不正确，批量保存时必须使用事务"), AsyncTaskExceptionProviderConst.SystemException);
-
         return runSql(requestId, insert, preparedStatement -> {
             int batchCount = 0;
             int batchResult = 0;

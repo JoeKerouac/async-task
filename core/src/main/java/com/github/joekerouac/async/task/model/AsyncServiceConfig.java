@@ -21,11 +21,11 @@ import javax.validation.constraints.NotNull;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngineFactory;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.async.task.spi.TraceService;
-import com.github.joekerouac.async.task.spi.TransactionHook;
 
 import lombok.Data;
 
@@ -38,10 +38,16 @@ import lombok.Data;
 public class AsyncServiceConfig {
 
     /**
-     * 任务存储仓库，不限制后端存储位置，但是如果后端不是持久化存储可能会导致服务重启后任务丢失；
+     * 任务存储仓库，不限制后端存储位置，但是如果后端不是持久化存储可能会导致服务重启后任务丢失；同时需要正确实现事务
      */
     @NotNull(message = "任务存储仓库不能为空")
     private AsyncTaskRepository repository;
+
+    /**
+     * 事务管理器
+     */
+    @NotNull(message = "事务管理器不能为空")
+    private AsyncTransactionManager transactionManager;
 
     /**
      * ID生成器，用于生成async task表的ID，不能为null
@@ -64,11 +70,6 @@ public class AsyncServiceConfig {
      * 初始任务处理器
      */
     private List<AbstractAsyncTaskProcessor<?>> processors;
-
-    /**
-     * 事务拦截器，允许为空，为空时可能小概率出现一些问题，例如任务已经执行了，但是添加数据库失败
-     */
-    private TransactionHook transactionHook;
 
     /**
      * 监控服务，允许为null，无论外部是否提供监控服务，系统都会提供一个默认的监控服务

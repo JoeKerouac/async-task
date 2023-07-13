@@ -34,7 +34,7 @@ import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
 import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.async.task.spi.TransactionHook;
@@ -64,29 +64,29 @@ public class FlowServiceAutoConfiguration {
     public FlowService flowService(@Autowired FlowServiceConfigModel flowServiceConfigModel,
         @Autowired FlowTaskRepository flowTaskRepository, @Autowired TaskNodeRepository taskNodeRepository,
         @Autowired TaskNodeMapRepository taskNodeMapRepository,
+        @Autowired(required = false) TransactionHook transactionHook,
         @Autowired(required = false) FlowMonitorService flowMonitorService,
         @Autowired(required = false) ProcessorSupplier processorSupplier) {
-        // 下面这几个bean都是async系统提供的，没有用auto wired，不然IDE会报错
+        // 下面这几个bean都是async系统提供的，没有用auto wired
         AsyncTaskService asyncTaskService = context.getBean(AsyncTaskService.class);
-        ConnectionSelector connectionSelector = context.getBean(ConnectionSelector.class);
-        TransactionHook transactionHook = context.getBean(TransactionHook.class);
         IDGenerator idGenerator = context.getBean(IDGenerator.class);
+        AsyncTransactionManager asyncTransactionManager = context.getBean(AsyncTransactionManager.class);
 
         LOGGER.debug("当前流式任务服务配置详情为： [{}:{}:{}:{}:{}:{}:{}:{}]", flowServiceConfigModel, flowTaskRepository,
-            taskNodeRepository, taskNodeMapRepository, idGenerator, transactionHook, connectionSelector,
+            taskNodeRepository, taskNodeMapRepository, idGenerator, transactionHook, asyncTransactionManager,
             flowMonitorService);
+
         FlowServiceConfig config = new FlowServiceConfig();
         config.setFlowTaskBatchSize(flowServiceConfigModel.getFlowTaskBatchSize());
         config.setStreamNodeMapBatchSize(flowServiceConfigModel.getStreamNodeMapBatchSize());
         config.setIdGenerator(idGenerator);
-        config.setTransactionHook(transactionHook);
         config.setAsyncTaskService(asyncTaskService);
         config.setFlowMonitorService(flowMonitorService == null ? new LogFlowMonitorService() : flowMonitorService);
         config.setFlowTaskRepository(flowTaskRepository);
         config.setTaskNodeRepository(taskNodeRepository);
         config.setTaskNodeMapRepository(taskNodeMapRepository);
-        config.setConnectionSelector(connectionSelector);
         config.setProcessorSupplier(processorSupplier);
+        config.setTransactionManager(asyncTransactionManager);
 
         Map<String, ExecuteStrategy> strategies = context.getBeansOfType(ExecuteStrategy.class);
         for (final ExecuteStrategy strategy : strategies.values()) {
@@ -114,28 +114,28 @@ public class FlowServiceAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public FlowTaskRepository flowTaskRepository() {
-        ConnectionSelector connectionSelector = context.getBean(ConnectionSelector.class);
-        LOGGER.info("使用默认flow task repository，当前connectionSelector： [{}]", connectionSelector);
+        AsyncTransactionManager transactionManager = context.getBean(AsyncTransactionManager.class);
+        LOGGER.info("使用默认flow task repository，当前connectionSelector： [{}]", transactionManager);
         // 注意：如果当前是单数据源场景下可以这么使用，如果是多数据源，则需要自行实现该逻辑
-        return new FlowTaskRepositoryImpl(connectionSelector);
+        return new FlowTaskRepositoryImpl(transactionManager);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public TaskNodeRepository taskNodeRepository() {
-        ConnectionSelector connectionSelector = context.getBean(ConnectionSelector.class);
-        LOGGER.info("使用默认task node repository，当前connectionSelector： [{}]", connectionSelector);
+        AsyncTransactionManager transactionManager = context.getBean(AsyncTransactionManager.class);
+        LOGGER.info("使用默认task node repository，当前connectionSelector： [{}]", transactionManager);
         // 注意：如果当前是单数据源场景下可以这么使用，如果是多数据源，则需要自行实现该逻辑
-        return new TaskNodeRepositoryImpl(connectionSelector);
+        return new TaskNodeRepositoryImpl(transactionManager);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public TaskNodeMapRepository taskNodeMapRepository() {
-        ConnectionSelector connectionSelector = context.getBean(ConnectionSelector.class);
-        LOGGER.info("使用默认task node map repository，当前connectionSelector： [{}]", connectionSelector);
+        AsyncTransactionManager transactionManager = context.getBean(AsyncTransactionManager.class);
+        LOGGER.info("使用默认task node map repository，当前connectionSelector： [{}]", transactionManager);
         // 注意：如果当前是单数据源场景下可以这么使用，如果是多数据源，则需要自行实现该逻辑
-        return new TaskNodeMapRepositoryImpl(connectionSelector);
+        return new TaskNodeMapRepositoryImpl(transactionManager);
     }
 
 }

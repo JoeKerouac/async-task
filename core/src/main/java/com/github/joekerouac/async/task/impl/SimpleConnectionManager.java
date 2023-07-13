@@ -19,14 +19,14 @@ import javax.sql.DataSource;
 
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.util.Assert;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.ConnectionManager;
 
 /**
  * @author JoeKerouac
  * @date 2022-10-14 14:37:00
  * @since 1.0.0
  */
-public class SimpleConnectionSelector implements ConnectionSelector {
+public class SimpleConnectionManager implements ConnectionManager {
 
     private final DataSource dataSource;
 
@@ -34,13 +34,13 @@ public class SimpleConnectionSelector implements ConnectionSelector {
 
     private static final ThreadLocal<Integer> COUNTER_THREAD_LOCAL = new ThreadLocal<>();
 
-    public SimpleConnectionSelector(DataSource dataSource) {
+    public SimpleConnectionManager(DataSource dataSource) {
         Assert.notNull(dataSource, "数据源不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         this.dataSource = dataSource;
     }
 
     @Override
-    public Connection select(final String requestId) throws SQLException {
+    public Connection get(final String requestId) throws SQLException {
         Connection connection = CONNECTION_THREAD_LOCAL.get();
         if (connection == null) {
             connection = dataSource.getConnection();

@@ -18,16 +18,15 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
-import javax.sql.DataSource;
 import javax.validation.constraints.NotNull;
 
 import com.github.joekerouac.async.task.db.AbstractRepository;
+import com.github.joekerouac.async.task.db.DBFuture;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskType;
 import com.github.joekerouac.async.task.flow.model.FlowTask;
 import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
-import com.github.joekerouac.async.task.service.TransactionSynchronizationManager;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.TableNameSelector;
 
 /**
@@ -54,21 +53,13 @@ public class FlowTaskRepositoryImpl extends AbstractRepository implements FlowTa
     private static final String UPDATE_LAST_TASK_ID =
         "update {} set `last_task_id` = ?, `gmt_update_time` = ? where `request_id` = ?";
 
-    public FlowTaskRepositoryImpl(DataSource dataSource) {
-        this(dataSource, DEFAULT_TABLE_NAME);
+    public FlowTaskRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager) {
+        this(transactionManager, task -> DEFAULT_TABLE_NAME);
     }
 
-    public FlowTaskRepositoryImpl(DataSource dataSource, String tableName) {
-        super(dataSource, tableName, FlowTask.class);
-    }
-
-    public FlowTaskRepositoryImpl(@NotNull final ConnectionSelector connectionSelector) {
-        this(connectionSelector, task -> DEFAULT_TABLE_NAME);
-    }
-
-    public FlowTaskRepositoryImpl(@NotNull final ConnectionSelector connectionSelector,
+    public FlowTaskRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager,
         @NotNull final TableNameSelector tableNameSelector) {
-        super(connectionSelector, tableNameSelector, FlowTask.class);
+        super(transactionManager, tableNameSelector, FlowTask.class);
     }
 
     @Override
@@ -108,8 +99,7 @@ public class FlowTaskRepositoryImpl extends AbstractRepository implements FlowTa
 
     private FlowTask internalSelect(final String requestId, final boolean lock) {
         boolean needLock = lock;
-        // 确定这样设计是否是合理的
-        if (needLock && !TransactionSynchronizationManager.getSupportSelectForUpdate()) {
+        if (needLock && !DBFuture.getSupportSelectForUpdate()) {
             // 需要加锁，并且当前线程配置的不支持select for update，这里尝试先update来锁定数据
             runSql(requestId, UPDATE_FOR_LOCK, PreparedStatement::executeUpdate, requestId);
             needLock = false;

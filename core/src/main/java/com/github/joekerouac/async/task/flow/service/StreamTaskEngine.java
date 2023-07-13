@@ -14,7 +14,6 @@ package com.github.joekerouac.async.task.flow.service;
 
 import java.util.List;
 
-import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.FlowTask;
@@ -66,7 +65,7 @@ public class StreamTaskEngine extends AbstractFlowTaskEngine {
 
         try {
             // 子节点为空，加主任务锁再次获取，主任务锁在添加任务的时候和pending的时候也会被锁定（注意，notifyPending的调用和这里不会并发），这里加锁保证不会与其冲突
-            return TransUtil.run(TransStrategy.REQUIRED, () -> {
+            return transactionManager.runWithTrans(TransStrategy.REQUIRED, () -> {
                 // 这里可能会超时，超时抛出异常，我们不用关心，抛出异常重试即可
                 FlowTask flowTask = flowTaskRepository.selectForLock(currentNode.getTaskRequestId());
                 Assert.notNull(flowTask, StringUtils.format("系统错误，当前子任务 [{}] 对应的主任务 [{}] 不存在",
@@ -101,7 +100,7 @@ public class StreamTaskEngine extends AbstractFlowTaskEngine {
         // 对于流式任务，如果任务节点被通知pending，此时不应该做任何处理，最终状态是父节点异步任务为执行完成，节点任务状态为pending；
         try {
             // 对主任务加锁，加锁后修改主任务状态
-            TransUtil.run(TransStrategy.REQUIRED, () -> {
+            transactionManager.runWithTrans(TransStrategy.REQUIRED, () -> {
                 // 这里可能会超时，超时抛出异常，我们不用关心，抛出异常重试即可
                 FlowTask flowTask = flowTaskRepository.selectForLock(notifyNode.getTaskRequestId());
 

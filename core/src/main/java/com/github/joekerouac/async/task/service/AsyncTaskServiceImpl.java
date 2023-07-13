@@ -24,7 +24,6 @@ import javax.validation.constraints.NotNull;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
-import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.entity.common.ExtMap;
 import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
@@ -43,7 +42,6 @@ import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.async.task.spi.TransactionCallback;
-import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
@@ -222,12 +220,13 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     @Override
     public void notifyTask(final String requestId, TransStrategy transStrategy) {
         AsyncTask task = config.getRepository().selectByRequestId(requestId);
+
         if (task != null && task.getStatus() == ExecStatus.WAIT) {
-            TransUtil.run(transStrategy, () -> {
+            config.getTransactionManager().runWithTrans(transStrategy, () -> {
                 if (config.getRepository().casUpdate(requestId, ExecStatus.WAIT, ExecStatus.READY, Const.IP) > 0) {
                     task.setStatus(ExecStatus.READY);
                     // 立即添加到内存中，防止调度延迟
-                    addTaskToEngine(task, transStrategy);
+                    addTaskToEngineAfterTransCommit(task);
                 }
             });
         }
@@ -237,7 +236,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     public CancelStatus cancelTask(String requestId, TransStrategy transStrategy) {
         Assert.assertTrue(start, "当前服务还未启动，请先启动后调用", ExceptionProviderConst.IllegalStateExceptionProvider);
 
-        return TransUtil.run(transStrategy, () -> {
+        return config.getTransactionManager().runWithTrans(transStrategy, () -> {
             AsyncTask task = config.getRepository().selectByRequestId(requestId);
             if (task == null) {
                 return CancelStatus.NOT_EXIST;
@@ -301,9 +300,9 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             }
         }
 
-        TransUtil.run(transStrategy, () -> {
+        config.getTransactionManager().runWithTrans(transStrategy, () -> {
             if (repository.save(asyncTask)) {
-                addTaskToEngine(asyncTask, transStrategy);
+                addTaskToEngineAfterTransCommit(asyncTask);
             } else {
                 // 主键冲突保存失败
                 config.getMonitorService().duplicateTask(requestId, task);
@@ -312,16 +311,12 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     }
 
     /**
-     * 将任务放入处理引擎中处理
+     * 将任务在事务提交后放入处理引擎中处理
      * 
      * @param asyncTask
      *            待添加的任务
-     * @param strategy
-     *            执行事务上下文时使用的策略
      */
-    private void addTaskToEngine(AsyncTask asyncTask, TransStrategy strategy) {
-        TransactionHook transactionHook = config.getTransactionHook();
-
+    private void addTaskToEngineAfterTransCommit(AsyncTask asyncTask) {
         Runnable callback = () -> {
             getEngine(asyncTask.getProcessor()).addTask(Collections.singletonList(asyncTask));
             if (LOGGER.isDebugEnabled()) {
@@ -329,49 +324,20 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             }
         };
 
-        // 如果当前没有事务hook或者当前已经没有事务了，直接执行回调就行了
-        if (transactionHook == null || !transactionHook.isActualTransactionActive()) {
+        // 如果当前没有事务，直接执行回调就行了
+        if (!config.getTransactionManager().isActualTransactionActive()) {
+            LOGGER.debug("当前不在事务中，直接将任务提交到任务执行引擎");
             callback.run();
             return;
-        }
-
-        // 当前仍然在事务上下文中，那么我们就要判断当前事务上下文是否是我们执行sql时的事务上下文了，如果是，则需要等待事务结束后才能执行回调
-        // 否则直接执行回调即可
-        boolean needRunAfterTransaction;
-
-        switch (strategy) {
-            case REQUIRED:
-            case SUPPORTS:
-                // 如果当前还有事务，说明之前就有事务，我们是加入的事务，我们需要在事务执行完毕后执行
-            case MANDATORY:
-                // mandatory表示当前肯定是加入事务的
-                needRunAfterTransaction = true;
-                break;
-            case REQUIRES_NEW:
-                // 开启了新事务，此时就算有事务，也不是我们的事务了
-            case NOT_SUPPORTED:
-                // 以非事务的方式运行，肯定不是我们的事务
-            case NEVER:
-                // 以非事务的方式运行，肯定不是我们的事务
-                needRunAfterTransaction = false;
-                break;
-            default:
-                throw new UnsupportedOperationException(StringUtils.format("不支持的事务策略：[{}]", strategy));
-        }
-
-        if (needRunAfterTransaction) {
+        } else {
             LOGGER.debug("当前在事务中，等待事务提交后将任务提交到任务执行引擎");
-            transactionHook.registerCallback(new TransactionCallback() {
+            config.getTransactionManager().registerCallback(new TransactionCallback() {
                 @Override
                 public void afterCommit() throws RuntimeException {
                     callback.run();
                 }
             });
-        } else {
-            LOGGER.debug("当前不在事务中，直接将任务提交到任务执行引擎");
-            callback.run();
         }
-
     }
 
     private AsyncTaskProcessorEngine getEngine(String processor) {

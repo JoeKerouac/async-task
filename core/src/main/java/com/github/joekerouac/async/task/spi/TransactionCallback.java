@@ -36,11 +36,6 @@ public interface TransactionCallback {
     }
 
     /**
-     * 将数据从缓存刷新到db，例如在hibernate JPA场景下会有用
-     */
-    default void flush() {}
-
-    /**
      * 将事务提交前调用该回调，但是并不意味着事务一定会提交并且提交成功，例如提交时出现了网络异常或者sql错误导致回滚等；
      * 
      * @param readOnly

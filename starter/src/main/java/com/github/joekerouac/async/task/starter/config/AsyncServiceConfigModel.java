@@ -23,7 +23,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
 
 import lombok.Data;
 
@@ -38,7 +37,8 @@ import lombok.Data;
 public class AsyncServiceConfigModel {
 
     /**
-     * 数据源名称，如果系统没有提供{@link ConnectionSelector ConnectionSelector}这个bean，则需要提供数据源的名称，该数据源中需要包含我们系统所必须的表
+     * 数据源名称，如果系统没有提供{@link com.github.joekerouac.async.task.spi.AsyncTransactionManager
+     * AsyncTransactionManager}这个bean，则需要提供数据源的名称，该数据源中需要包含我们系统所必须的表
      */
     private String dataSource;
 

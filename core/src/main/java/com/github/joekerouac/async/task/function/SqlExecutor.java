@@ -20,13 +20,13 @@ import java.sql.SQLException;
  * @date 2022-10-14 14:37:00
  * @since 1.0.0
  */
-public interface TransExecutor<T> {
+public interface SqlExecutor<T> {
 
     /**
      * 使用指定链接执行函数，返回一个结果
      * 
      * @param connection
-     *            链接
+     *            数据库连接
      * @return 函数执行结果
      * @throws SQLException
      *             SQL异常

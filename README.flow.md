@@ -165,10 +165,12 @@ import com.github.joekerouac.async.task.flow.model.SetTaskModel;
 import com.github.joekerouac.async.task.flow.model.StreamTaskModel;
 import com.github.joekerouac.async.task.flow.model.TaskNodeModel;
 import com.github.joekerouac.async.task.flow.service.FlowServiceImpl;
-import com.github.joekerouac.async.task.impl.SimpleConnectionSelector;
+import com.github.joekerouac.async.task.impl.SimpleConnectionManager;
 import com.github.joekerouac.async.task.model.ExecResult;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.ConnectionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
+import com.github.joekerouac.async.task.db.AsyncTransactionManagerImpl;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -184,7 +186,7 @@ public class Test {
     public static void main(String[] args) {
         // TODO 请自行提供DataSource
         DataSource dataSource = null;
-        ConnectionSelector connectionSelector = new SimpleConnectionSelector(dataSource);
+        ConnectionSelector connectionManager = new SimpleConnectionSelector(dataSource);
         FlowServiceConfig config = new FlowServiceConfig();
         config.setIdGenerator(new IDGenerator() {
             @Override
@@ -194,15 +196,17 @@ public class Test {
             }
         });
 
+        AsyncTransactionManager transactionManager = new AsyncTransactionManagerImpl(new SimpleConnectionManager(dataSource), null);
+        
         // TODO 根据异步任务框架文档构建好AsyncTaskService后传过来
         config.setAsyncTaskService(null);
         // 这里使用默认的日志监控，对于监控中的错误最好自行实现微信通知等，方便及时人工介入处理；
         config.setFlowMonitorService(new LogFlowMonitorService());
         // TODO 下面这三个repository如果不想使用默认的可以自己实现，或者调用其他构造器
-        config.setFlowTaskRepository(new FlowTaskRepositoryImpl(connectionSelector));
-        config.setTaskNodeRepository(new TaskNodeRepositoryImpl(connectionSelector));
-        config.setTaskNodeMapRepository(new TaskNodeMapRepositoryImpl(connectionSelector));
-        config.setConnectionSelector(connectionSelector);
+        config.setFlowTaskRepository(new FlowTaskRepositoryImpl(connectionManager));
+        config.setTaskNodeRepository(new TaskNodeRepositoryImpl(connectionManager));
+        config.setTaskNodeMapRepository(new TaskNodeMapRepositoryImpl(connectionManager));
+        config.setTransactionManager(transactionManager);
         // TODO 自行将自己的processor注册过来
         config.getProcessors().add(new TestProcessor());
 

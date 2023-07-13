@@ -33,10 +33,9 @@ import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.ProcessorSupplier;
-import com.github.joekerouac.async.task.spi.TransactionHook;
 
 import lombok.CustomLog;
 import lombok.Data;
@@ -72,11 +71,6 @@ public class FlowServiceConfig {
     private IDGenerator idGenerator;
 
     /**
-     * 事务拦截器，允许为空，为空时可能小概率出现一些问题，例如任务已经执行了，但是添加数据库失败
-     */
-    private TransactionHook transactionHook;
-
-    /**
      * 异步任务服务
      */
     @NotNull
@@ -89,25 +83,25 @@ public class FlowServiceConfig {
     private FlowMonitorService flowMonitorService;
 
     /**
-     * 节点任务仓库，如果为空时{@link #connectionSelector}不允许为空，系统将使用{@link #connectionSelector}来构建仓储服务
+     * 节点任务仓库，允许为空
      */
     private FlowTaskRepository flowTaskRepository;
 
     /**
-     * 节点仓库，如果为空时{@link #connectionSelector}不允许为空，系统将使用{@link #connectionSelector}来构建仓储服务
+     * 节点仓库，允许为空
      */
     private TaskNodeRepository taskNodeRepository;
 
     /**
-     * 节点关系仓库，如果为空时{@link #connectionSelector}不允许为空，系统将使用{@link #connectionSelector}来构建仓储服务
+     * 节点关系仓库，允许为空
      */
     private TaskNodeMapRepository taskNodeMapRepository;
 
     /**
-     * 链接选择器，注意，返回的链接中必须可以对flow_task、task_node、task_node_map三个表进行操作；如果三个repository其中某些为空某些不为空时，该
-     * connectionSelector返回的链接必须与他们三个连接的时同一个库（或者透明的支持跨库事务）；
+     * 事务管理器
      */
-    private ConnectionSelector connectionSelector;
+    @NotNull(message = "事务管理器不能为空")
+    private AsyncTransactionManager transactionManager;
 
     /**
      * 任务处理器提供者，优先使用静态任务处理器，静态任务处理器不存在时尝试使用从该处理器提供者获取

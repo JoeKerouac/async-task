@@ -16,15 +16,14 @@ import java.sql.ResultSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import javax.sql.DataSource;
 import javax.validation.constraints.NotNull;
 
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.db.AbstractRepository;
 import com.github.joekerouac.async.task.flow.model.TaskNodeMap;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.TableNameSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 
 /**
  * @author JoeKerouac
@@ -39,21 +38,13 @@ public class TaskNodeMapRepositoryImpl extends AbstractRepository implements Tas
 
     private static final String GET_ALL_CHILD = "select * from {} where `task_request_id` = ? and `parent_node` = ?";
 
-    public TaskNodeMapRepositoryImpl(DataSource dataSource) {
-        this(dataSource, DEFAULT_TABLE_NAME);
+    public TaskNodeMapRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager) {
+        this(transactionManager, task -> DEFAULT_TABLE_NAME);
     }
 
-    public TaskNodeMapRepositoryImpl(DataSource dataSource, String tableName) {
-        super(dataSource, tableName, TaskNodeMap.class);
-    }
-
-    public TaskNodeMapRepositoryImpl(@NotNull final ConnectionSelector connectionSelector) {
-        this(connectionSelector, task -> DEFAULT_TABLE_NAME);
-    }
-
-    public TaskNodeMapRepositoryImpl(@NotNull final ConnectionSelector connectionSelector,
+    public TaskNodeMapRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager,
         @NotNull final TableNameSelector tableNameSelector) {
-        super(connectionSelector, tableNameSelector, TaskNodeMap.class);
+        super(transactionManager, tableNameSelector, TaskNodeMap.class);
     }
 
     @Override

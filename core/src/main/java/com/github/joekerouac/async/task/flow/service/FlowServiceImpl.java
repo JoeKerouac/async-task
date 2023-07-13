@@ -26,7 +26,6 @@ import java.util.stream.Collectors;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
-import com.github.joekerouac.async.task.db.TransUtil;
 import com.github.joekerouac.async.task.exception.ProcessorAlreadyExistException;
 import com.github.joekerouac.async.task.flow.FlowService;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
@@ -50,11 +49,10 @@ import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.async.task.spi.TransactionCallback;
-import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.collection.Pair;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
@@ -95,9 +93,9 @@ public class FlowServiceImpl implements FlowService {
     private final IDGenerator idGenerator;
 
     /**
-     * 事务拦截器，允许为空，为空时可能小概率出现一些问题，例如任务已经执行了，但是添加数据库失败
+     * 事务管理器
      */
-    private final TransactionHook transactionHook;
+    private final AsyncTransactionManager transactionManager;
 
     /**
      * 异步任务服务
@@ -156,22 +154,17 @@ public class FlowServiceImpl implements FlowService {
 
     public FlowServiceImpl(FlowServiceConfig config) {
         Const.VALIDATION_SERVICE.validate(config);
-        Assert.assertTrue(
-            (config.getFlowTaskRepository() != null && config.getTaskNodeRepository() != null
-                && config.getTaskNodeMapRepository() != null) || config.getConnectionSelector() != null,
-            "repository和connectionSlector不能同时为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
 
+        transactionManager = config.getTransactionManager();
         streamNodeMapBatchSize = config.getStreamNodeMapBatchSize();
         idGenerator = config.getIdGenerator();
-        transactionHook = config.getTransactionHook();
         asyncTaskService = config.getAsyncTaskService();
-        ConnectionSelector connectionSelector = config.getConnectionSelector();
-        flowTaskRepository = config.getFlowTaskRepository() == null ? new FlowTaskRepositoryImpl(connectionSelector)
+        flowTaskRepository = config.getFlowTaskRepository() == null ? new FlowTaskRepositoryImpl(transactionManager)
             : config.getFlowTaskRepository();
-        taskNodeRepository = config.getTaskNodeRepository() == null ? new TaskNodeRepositoryImpl(connectionSelector)
+        taskNodeRepository = config.getTaskNodeRepository() == null ? new TaskNodeRepositoryImpl(transactionManager)
             : config.getTaskNodeRepository();
         taskNodeMapRepository = config.getTaskNodeMapRepository() == null
-            ? new TaskNodeMapRepositoryImpl(connectionSelector) : config.getTaskNodeMapRepository();
+            ? new TaskNodeMapRepositoryImpl(transactionManager) : config.getTaskNodeMapRepository();
         processors = new ConcurrentHashMap<>();
         processorSupplier = config.getProcessorSupplier();
         for (final AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
@@ -193,7 +186,7 @@ public class FlowServiceImpl implements FlowService {
             AbstractFlowTaskEngine.EngineConfig.builder().processors(processors).asyncTaskService(asyncTaskService)
                 .flowMonitorService(config.getFlowMonitorService()).flowTaskRepository(flowTaskRepository)
                 .taskNodeRepository(taskNodeRepository).taskNodeMapRepository(taskNodeMapRepository)
-                .executeStrategies(executeStrategies).connectionSelector(connectionSelector).build();
+                .executeStrategies(executeStrategies).transactionManager(transactionManager).build();
 
         streamTaskEngine = new StreamTaskEngine(engineConfig, schedulerSystem);
 
@@ -369,7 +362,7 @@ public class FlowServiceImpl implements FlowService {
         // 单链构建完毕，准备更新到数据库
         AtomicBoolean hasMoreData = new AtomicBoolean(true);
 
-        TransUtil.run(TransStrategy.REQUIRED, () -> {
+        transactionManager.runWithTrans(TransStrategy.REQUIRED, () -> {
             /*
              * 1、锁定主任务
              */
@@ -515,7 +508,7 @@ public class FlowServiceImpl implements FlowService {
 
         task.setLastTaskId(nodes.get(nodes.size() - 1).getRequestId());
 
-        TransUtil.run(TransStrategy.REQUIRED, () -> {
+        transactionManager.runWithTrans(TransStrategy.REQUIRED, () -> {
             /*
              * 1、如果主任务已经存在，那么锁定，否则创建
              */
@@ -573,8 +566,8 @@ public class FlowServiceImpl implements FlowService {
             }
         });
 
-        if (transactionHook != null && transactionHook.isActualTransactionActive()) {
-            transactionHook.registerCallback(new TransactionCallback() {
+        if (transactionManager.isActualTransactionActive()) {
+            transactionManager.registerCallback(new TransactionCallback() {
                 @Override
                 public void afterCommit() throws RuntimeException {
                     registerStreamTaskBuildTask(streamId);
@@ -610,7 +603,7 @@ public class FlowServiceImpl implements FlowService {
                 new Pair<>(new ArrayList<>(), new ArrayList<>()), new HashSet<>(), new HashSet<>());
 
         // 开启事务
-        TransUtil.run(TransStrategy.REQUIRED, () -> {
+        transactionManager.runWithTrans(TransStrategy.REQUIRED, () -> {
             flowTaskRepository.save(flowTask);
             // 将第一个节点直接设置为ready状态，这里虽然是遍历，但是一般第一个就是第一个节点，这里只是做了兜底，防止后续开发过程中不小心更改了顺序，导致list中的第一个不是真正的第一个执行节点
             for (final TaskNode taskNode : pair.getKey()) {

@@ -37,7 +37,6 @@ import com.github.joekerouac.async.task.flow.model.StreamTaskModel;
 import com.github.joekerouac.async.task.flow.model.TaskNodeModel;
 import com.github.joekerouac.async.task.flow.service.FlowServiceImpl;
 import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
-import com.github.joekerouac.async.task.impl.SimpleConnectionSelector;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.test.TestEngine;
@@ -64,8 +63,7 @@ public class FlowTaskTest extends TestEngine {
         super.init();
         FlowServiceConfig config = new FlowServiceConfig();
         config.setIdGenerator(asyncServiceConfig.getIdGenerator());
-        config.setConnectionSelector(new SimpleConnectionSelector(dataSource));
-        config.setTransactionHook(asyncServiceConfig.getTransactionHook());
+        config.setTransactionManager(transactionManager);
         config.setAsyncTaskService(asyncTaskService);
         config.setFlowMonitorService(new FlowMonitorService() {});
         flowService = new FlowServiceImpl(config);

@@ -27,13 +27,16 @@ import org.testng.Assert;
 
 import com.alibaba.druid.pool.DruidDataSource;
 import com.github.joekerouac.async.task.AsyncTaskService;
+import com.github.joekerouac.async.task.db.AsyncTransactionManagerImpl;
+import com.github.joekerouac.async.task.db.DBFuture;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
+import com.github.joekerouac.async.task.impl.SimpleConnectionManager;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
-import com.github.joekerouac.async.task.service.TransactionSynchronizationManager;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.common.tools.io.IOUtils;
 import com.github.joekerouac.common.tools.resource.impl.ClassPathResource;
 import com.github.joekerouac.common.tools.string.StringUtils;
@@ -58,8 +61,10 @@ public class TestEngine {
 
     protected AsyncServiceConfig asyncServiceConfig;
 
+    protected AsyncTransactionManager transactionManager;
+
     static {
-        TransactionSynchronizationManager.setGlobalSupportSelectForUpdate(false);
+        DBFuture.setGlobalSupportSelectForUpdate(false);
     }
 
     /**
@@ -70,12 +75,14 @@ public class TestEngine {
      */
     public void init() throws Exception {
         this.dataSource = initDataSource(StringUtils.format("{}-test.db", getClass().getSimpleName()));
+        this.transactionManager = new AsyncTransactionManagerImpl(new SimpleConnectionManager(dataSource), null);
 
-        repository = new AsyncTaskRepositoryImpl(this.dataSource);
+        repository = new AsyncTaskRepositoryImpl(transactionManager);
         asyncServiceConfig = new AsyncServiceConfig();
         asyncServiceConfig.setRepository(repository);
         asyncServiceConfig.setDefaultExecutorConfig(new AsyncTaskExecutorConfig());
         asyncServiceConfig.setIdGenerator(() -> UUID.randomUUID().toString());
+        asyncServiceConfig.setTransactionManager(transactionManager);
 
         AsyncTaskService service = new AsyncTaskServiceImpl(asyncServiceConfig);
         service.start();

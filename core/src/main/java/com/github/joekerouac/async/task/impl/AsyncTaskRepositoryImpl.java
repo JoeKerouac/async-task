@@ -21,7 +21,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import javax.sql.DataSource;
 import javax.validation.constraints.NotNull;
 
 import com.github.joekerouac.async.task.db.AbstractRepository;
@@ -29,8 +28,8 @@ import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.TableNameSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.StringConst;
 import com.github.joekerouac.common.tools.db.SqlUtil;
@@ -77,21 +76,13 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     private static final String SQL_STAT =
         "select * from {} where `status` = '" + ExecStatus.RUNNING.code() + "' and `gmt_update_time` <= ?";
 
-    public AsyncTaskRepositoryImpl(DataSource dataSource) {
-        this(dataSource, DEFAULT_TABLE_NAME);
+    public AsyncTaskRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager) {
+        this(transactionManager, task -> DEFAULT_TABLE_NAME);
     }
 
-    public AsyncTaskRepositoryImpl(DataSource dataSource, String tableName) {
-        super(dataSource, tableName, AsyncTask.class);
-    }
-
-    public AsyncTaskRepositoryImpl(@NotNull final ConnectionSelector connectionSelector) {
-        this(connectionSelector, task -> DEFAULT_TABLE_NAME);
-    }
-
-    public AsyncTaskRepositoryImpl(@NotNull final ConnectionSelector connectionSelector,
+    public AsyncTaskRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager,
         @NotNull final TableNameSelector tableNameSelector) {
-        super(connectionSelector, tableNameSelector, AsyncTask.class);
+        super(transactionManager, tableNameSelector, AsyncTask.class);
     }
 
     @Override

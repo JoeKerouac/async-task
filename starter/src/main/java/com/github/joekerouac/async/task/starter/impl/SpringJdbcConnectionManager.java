@@ -19,7 +19,7 @@ import javax.sql.DataSource;
 
 import org.springframework.jdbc.datasource.DataSourceUtils;
 
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
+import com.github.joekerouac.async.task.spi.ConnectionManager;
 
 /**
  * 依赖于spring jdbc实现的链接选择器
@@ -28,16 +28,16 @@ import com.github.joekerouac.async.task.spi.ConnectionSelector;
  * @date 2022-10-14 14:37:00
  * @since 1.0.0
  */
-public class SpringJdbcConnectionSelector implements ConnectionSelector {
+public class SpringJdbcConnectionManager implements ConnectionManager {
 
     private final DataSource dataSource;
 
-    public SpringJdbcConnectionSelector(final DataSource dataSource) {
+    public SpringJdbcConnectionManager(final DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
     @Override
-    public Connection select(final String requestId) throws SQLException {
+    public Connection get(final String requestId) throws SQLException {
         return DataSourceUtils.doGetConnection(dataSource);
     }
 

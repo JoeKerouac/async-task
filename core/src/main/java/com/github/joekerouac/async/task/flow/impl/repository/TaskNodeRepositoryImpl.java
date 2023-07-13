@@ -17,15 +17,14 @@ import java.sql.ResultSet;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import javax.sql.DataSource;
 import javax.validation.constraints.NotNull;
 
 import com.github.joekerouac.async.task.db.AbstractRepository;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.TaskNode;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
-import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.TableNameSelector;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.common.tools.string.StringUtils;
 
 /**
@@ -54,21 +53,13 @@ public class TaskNodeRepositoryImpl extends AbstractRepository implements TaskNo
     private static final String BATCH_UPDATE_STATUS =
         "update `{}` set `status` = ?, `gmt_update_time` = ? where `request_id` in (" + PLACEHOLDER + ")";
 
-    public TaskNodeRepositoryImpl(DataSource dataSource) {
-        this(dataSource, DEFAULT_TABLE_NAME);
+    public TaskNodeRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager) {
+        this(transactionManager, task -> DEFAULT_TABLE_NAME);
     }
 
-    public TaskNodeRepositoryImpl(DataSource dataSource, String tableName) {
-        super(dataSource, tableName, TaskNode.class);
-    }
-
-    public TaskNodeRepositoryImpl(@NotNull final ConnectionSelector connectionSelector) {
-        this(connectionSelector, task -> DEFAULT_TABLE_NAME);
-    }
-
-    public TaskNodeRepositoryImpl(@NotNull final ConnectionSelector connectionSelector,
+    public TaskNodeRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager,
         @NotNull final TableNameSelector tableNameSelector) {
-        super(connectionSelector, tableNameSelector, TaskNode.class);
+        super(transactionManager, tableNameSelector, TaskNode.class);
     }
 
     @Override
