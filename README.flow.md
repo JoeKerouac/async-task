@@ -132,7 +132,7 @@ create table if not exists `task_node_map`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 comment '流式任务节点关系表';
 
-create index `idx_task_req` on `task_node_map` (`task_request_id`);
+create unique index `idx_task_req` on `task_node_map` (`task_request_id`, `parent_node`, `child_node`);
 create index `idx_parent_req` on `task_node_map` (`parent_node`);
 create index `idx_child_req` on `task_node_map` (`child_node`);
 
@@ -197,7 +197,7 @@ public class Test {
         });
 
         AsyncTransactionManager transactionManager = new AsyncTransactionManagerImpl(new SimpleConnectionManager(dataSource), null);
-        
+
         // TODO 根据异步任务框架文档构建好AsyncTaskService后传过来
         config.setAsyncTaskService(null);
         // 这里使用默认的日志监控，对于监控中的错误最好自行实现微信通知等，方便及时人工介入处理；
