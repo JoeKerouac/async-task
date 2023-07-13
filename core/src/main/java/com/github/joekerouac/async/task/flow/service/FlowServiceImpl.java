@@ -359,7 +359,7 @@ public class FlowServiceImpl implements FlowService {
     }
 
     /**
-     * 从数据库捞取指定流式任务的INIT状态的子任务，将其构建为一个单链附加到当前主任务的执行链的末尾；
+     * 从数据库捞取指定流式任务的INIT状态的子任务，将其构建为一个单链附加到当前主任务的执行链的末尾；同时再构建完执行链后判断是否需要主动唤醒（有可能原链执行完了，需要从新链起始位置执行，此时需要主动唤醒）
      *
      * @param taskRequestId
      *            流式任务主任务的requestId

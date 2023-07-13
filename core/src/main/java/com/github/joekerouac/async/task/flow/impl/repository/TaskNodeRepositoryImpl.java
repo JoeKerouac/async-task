@@ -20,13 +20,13 @@ import java.util.List;
 import javax.sql.DataSource;
 import javax.validation.constraints.NotNull;
 
-import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.async.task.db.AbstractRepository;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.TaskNode;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
 import com.github.joekerouac.async.task.spi.ConnectionSelector;
 import com.github.joekerouac.async.task.spi.TableNameSelector;
+import com.github.joekerouac.common.tools.string.StringUtils;
 
 /**
  * @author JoeKerouac
@@ -111,6 +111,10 @@ public class TaskNodeRepositoryImpl extends AbstractRepository implements TaskNo
 
     @Override
     public int batchUpdateStatus(final List<String> nodeRequestIds, final TaskNodeStatus status) {
+        if (nodeRequestIds.isEmpty()) {
+            return 0;
+        }
+
         String paramsPlaceholder = StringUtils.copy(", ?", nodeRequestIds.size());
 
         Object[] params = new Object[2 + nodeRequestIds.size()];
