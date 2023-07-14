@@ -28,7 +28,6 @@ import com.github.joekerouac.async.task.spi.TransactionCallback;
 import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.exception.DBException;
-import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
 
 import lombok.CustomLog;
@@ -126,18 +125,16 @@ public class AsyncTransactionManagerImpl implements AsyncTransactionManager {
 
     @Override
     public void registerCallback(TransactionCallback callback) throws NoTransactionException {
-        Assert.assertTrue(isActualTransactionActive(), StringUtils.format("当前不在事务中执行，无法注册回调"),
+        Assert.assertTrue(isActualTransactionActive(), "当前不在事务中执行，无法注册回调",
             ExceptionProviderConst.IllegalStateExceptionProvider);
         ResourceHolder resourceHolder = resourceHolderThreadLocal.get();
         if (resourceHolder == null || !resourceHolder.isNeedCommit()) {
             // 注意，因为我们校验了当前肯定有事务：
             // 1、如果resourceHolder为空，表示事务不是本管理器管理的，那transactionHook肯定不为空
             // 2、如果resourceHolder不为空，但是事务不需要提交，表示事务也不是本管理器管理的，此时transactionHook可能为空
-            if (transactionHook != null) {
-                transactionHook.registerCallback(callback);
-            } else {
-                throw new IllegalStateException("当前事务不是异步任务系统管理的，同时没有引入外部事务hook，无法注册事务回调");
-            }
+            Assert.notNull(transactionHook, "当前事务不是异步任务系统管理的，同时没有引入外部事务hook，无法注册事务回调",
+                ExceptionProviderConst.IllegalStateExceptionProvider);
+            transactionHook.registerCallback(callback);
         } else {
             List<TransactionCallback> transactionCallbacks = transactionCallbackThreadLocal.get();
             if (transactionCallbacks == null) {
