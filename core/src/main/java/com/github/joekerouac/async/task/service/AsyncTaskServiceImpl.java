@@ -224,6 +224,9 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         if (task != null && task.getStatus() == ExecStatus.WAIT) {
             config.getTransactionManager().runWithTrans(transStrategy, () -> {
                 if (config.getRepository().casUpdate(requestId, ExecStatus.WAIT, ExecStatus.READY, Const.IP) > 0) {
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("唤醒任务: [{}]", task.getRequestId());
+                    }
                     task.setStatus(ExecStatus.READY);
                     // 立即添加到内存中，防止调度延迟
                     addTaskToEngineAfterTransCommit(task);

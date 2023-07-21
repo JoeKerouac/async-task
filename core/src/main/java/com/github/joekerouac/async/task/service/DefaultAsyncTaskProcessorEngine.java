@@ -228,6 +228,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         LockTaskUtil.runWithLock(queueLock.writeLock(), () -> {
             Pair<String, LocalDateTime> oldFirst = queue.isEmpty() ? null : queue.first();
 
+            int addSuccessCount = 0;
+
             for (final AsyncTask task : tasks) {
                 if (task.getStatus() != ExecStatus.READY) {
                     LOGGER.debug("当前任务状态不是READY，无需添加到内存队列, task: [{}]", task);
@@ -236,7 +238,14 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                 // 这里兜底确保任务没有添加过；PS：其实就算任务添加过，后续执行中还会有检查，问题不大
                 if (!this.queue.add(new Pair<>(task.getRequestId(), task.getExecTime())) && LOGGER.isDebugEnabled()) {
                     LOGGER.debug("任务 [{}] 已经在队列中了，忽略该任务", task);
+                } else {
+                    addSuccessCount += 1;
                 }
+            }
+
+            if (addSuccessCount <= 0) {
+                LOGGER.debug("当前并未实际添加内存队列，不进行队列唤醒");
+                return;
             }
 
             // 如果队列超长，则将队列最后的任务删除，注意，这里可能多线程都在处理，不过无所谓，最差也就是队列被删除到长度小于cacheQueueSize
