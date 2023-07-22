@@ -622,7 +622,6 @@ public class FlowServiceImpl implements FlowService {
 
         });
 
-
         // 注意，这个一定要放在事务执行后再执行，否则会有时序问题
         asyncTaskService.notifyTask(flowTask.getFirstTaskId());
     }
