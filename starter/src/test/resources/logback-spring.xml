@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name"
+                    defaultValue="pay-server"/>
+
+    <!-- 日志输出格式 -->
+    <springProperty scope="context" name="LOG_PATTERN" source="logging.pattern.file"
+                    defaultValue="%d{yyyy-MM-dd HH:mm:ss:SSS} [%-5level] [%X{X-B3-TraceId:-},%X{X-B3-SpanId:-}] %logger{20} - %message%n"/>
+
+    <!-- Console 输出设置 -->
+    <appender name="LOG_TO_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>utf-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 包装为异步输出 -->
+    <appender name="ASYNC_LOG_TO_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <neverBlock>true</neverBlock>
+        <discardingThreshold>0</discardingThreshold>
+        <queueSize>256</queueSize>
+        <appender-ref ref="LOG_TO_CONSOLE"/>
+    </appender>
+
+    <logger name="com.github.joekerouac.async" level="debug"/>
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC_LOG_TO_CONSOLE"/>
+    </root>
+
+</configuration>

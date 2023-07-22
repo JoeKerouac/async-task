@@ -620,9 +620,11 @@ public class FlowServiceImpl implements FlowService {
                     LocalDateTime.now(), SetTaskEngine.PROCESSOR_NAME, TransStrategy.SUPPORTS);
             }
 
-            // 唤醒第一个任务，开始执行
-            asyncTaskService.notifyTask(flowTask.getFirstTaskId());
         });
+
+
+        // 注意，这个一定要放在事务执行后再执行，否则会有时序问题
+        asyncTaskService.notifyTask(flowTask.getFirstTaskId());
     }
 
     /**
