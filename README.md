@@ -25,7 +25,7 @@
 <dependency>
     <groupId>com.github.JoeKerouac</groupId>
     <artifactId>async-task-starter</artifactId>
-    <version>2.0.2</version>
+    <version>${async-task-starter.version}</version>
 </dependency>
 ```
 
@@ -36,7 +36,7 @@
 <dependency>
     <groupId>com.github.JoeKerouac</groupId>
     <artifactId>async-task-core</artifactId>
-    <version>2.0.2</version>
+    <version>${async-task-core.version}</version>
 </dependency>
 ```
 
