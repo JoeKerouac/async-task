@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,7 +89,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
     /**
      * 内存中的缓存任务队列，key是任务requestId，value是任务预期执行时间
      */
-    private final NavigableSet<Pair<String, LocalDateTime>> queue;
+    private final NavigableSet<Pair<String, AsyncTask>> queue;
 
     /**
      * 异步任务配置
@@ -156,8 +155,27 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         this.processorGroup = Collections.unmodifiableSet(engineConfig.getProcessorGroup());
         this.contain = engineConfig.isContain();
 
-        // 队列中按照时间从小到大排序
-        queue = new TreeSet<>(Comparator.comparing(Pair::getValue));
+        // 队列中按照时间从小到大排序，如果指定时间一致，则任务创建IP与当前机器一致的在前
+        queue = new TreeSet<>((o1, o2) -> {
+            AsyncTask task1 = o1.getValue();
+            AsyncTask task2 = o2.getValue();
+            int result = task1.getExecTime().compareTo(task2.getExecTime());
+            if (result != 0) {
+                return result;
+            }
+
+            String ip1 = task1.getCreateIp();
+            String ip2 = task2.getCreateIp();
+            if (ip1.equals(ip2)) {
+                return 0;
+            } else if (Const.IP.equals(ip1)) {
+                return -1;
+            } else if (Const.IP.equals(ip2)) {
+                return 1;
+            } else {
+                return 0;
+            }
+        });
 
         queueLock = new ReentrantReadWriteLock();
         condition = queueLock.writeLock().newCondition();
@@ -226,7 +244,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         }
 
         LockTaskUtil.runWithLock(queueLock.writeLock(), () -> {
-            Pair<String, LocalDateTime> oldFirst = queue.isEmpty() ? null : queue.first();
+            Pair<String, AsyncTask> oldFirst = queue.isEmpty() ? null : queue.first();
 
             int addSuccessCount = 0;
 
@@ -236,7 +254,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                     continue;
                 }
                 // 这里兜底确保任务没有添加过；PS：其实就算任务添加过，后续执行中还会有检查，问题不大
-                if (!this.queue.add(new Pair<>(task.getRequestId(), task.getExecTime())) && LOGGER.isDebugEnabled()) {
+                if (!this.queue.add(new Pair<>(task.getRequestId(), task)) && LOGGER.isDebugEnabled()) {
                     LOGGER.debug("任务 [{}] 已经在队列中了，忽略该任务", task);
                 } else {
                     addSuccessCount += 1;
@@ -248,9 +266,9 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                 return;
             }
 
-            // 如果队列超长，则将队列最后的任务删除，注意，这里可能多线程都在处理，不过无所谓，最差也就是队列被删除到长度小于cacheQueueSize
+            // 如果队列超长，则将队列最后的任务删除
             while (queue.size() - executorConfig.getCacheQueueSize() > 0) {
-                Pair<String, LocalDateTime> remove = this.queue.pollLast();
+                Pair<String, AsyncTask> remove = this.queue.pollLast();
                 if (remove != null && LOGGER.isDebugEnabled()) {
                     LOGGER.debug("当前任务队列超长，将最晚执行的任务移除, 移除的任务: [{}]", remove.getKey());
                 }
@@ -261,14 +279,14 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                 condition.signalAll();
             } else {
                 // 因为是添加任务，所以这里肯定有值了
-                Pair<String, LocalDateTime> newFirst = queue.first();
+                Pair<String, AsyncTask> newFirst = queue.first();
 
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("任务添加完毕，开始唤醒处理, oldFirst: [{}], new: [{}]", oldFirst, newFirst);
                 }
 
                 // 如果新加任务中有任务的就绪时间是早于当前任务的，应该通知所有线程去重新获取最新任务就绪时间，注意，这里是唤醒所有线程，而不是一个线程
-                if (newFirst.getValue().isBefore(oldFirst.getValue())) {
+                if (newFirst.getValue().getExecTime().isBefore(oldFirst.getValue().getExecTime())) {
                     condition.signalAll();
                 }
             }
@@ -325,6 +343,9 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             while (start) {
                 try {
                     Thread.sleep(executorConfig.getMonitorInterval());
+                    if (!start) {
+                        return;
+                    }
                     LockTaskUtil.runWithLock(queueLock.readLock(), () -> monitorService.monitor(queue.size()));
 
                     // 统计在指定时间之前就开始执行的任务
@@ -630,9 +651,9 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                 long waitTime = 5000;
 
                 if (!queue.isEmpty()) {
-                    Pair<String, LocalDateTime> pair = queue.first();
+                    Pair<String, AsyncTask> pair = queue.first();
 
-                    LocalDateTime execTime = pair.getValue();
+                    LocalDateTime execTime = pair.getValue().getExecTime();
                     LocalDateTime now = LocalDateTime.now();
 
                     // 计算now - execTime，判断第一个任务是否应该执行

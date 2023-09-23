@@ -45,3 +45,8 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 # v3.0.0
 - 事务相关内容重构；
 - 修复流式任务中事务不生效问题；
+
+# v3.0.1
+- 优化任务关闭处理；
+- 优化任务排序，优先处理本机的任务；
+
