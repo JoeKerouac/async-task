@@ -23,6 +23,7 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -172,7 +173,8 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         @Autowired IDGenerator asyncIdGenerator, @Autowired AsyncTransactionManager asyncTransactionManager,
         @Autowired(required = false) MonitorService monitorService,
         @Autowired(required = false) TraceService traceService,
-        @Autowired(required = false) ProcessorSupplier processorSupplier) {
+        @Autowired(required = false) ProcessorSupplier processorSupplier,
+        @Value("${async.service.loadTaskFromRepository:true}") boolean loadTaskFromRepository) {
         LOGGER.debug("当前异步任务服务配置详情为： [{}:{}:{}:{}:{}]", asyncServiceConfigModel, asyncTaskRepository, asyncIdGenerator,
             asyncTransactionManager, monitorService);
 
@@ -185,6 +187,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
         config.setProcessorSupplier(processorSupplier);
         config.setDefaultExecutorConfig(convert(asyncServiceConfigModel.getDefaultExecutorConfig()));
         config.setEngineFactory(engineFactory);
+        config.setLoadTaskFromRepository(loadTaskFromRepository);
 
         Map<Set<String>, AsyncServiceConfigModel.Config> configs = asyncServiceConfigModel.getExecutorConfigs();
         Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = new HashMap<>();

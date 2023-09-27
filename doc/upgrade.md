@@ -50,3 +50,6 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 - 优化任务关闭处理；
 - 优化任务排序，优先处理本机的任务；
 
+# v3.0.2
+- 允许使用配置关闭任务调度；
+

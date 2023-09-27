@@ -30,11 +30,11 @@
     <parent>
         <groupId>com.github.JoeKerouac</groupId>
         <artifactId>async-task</artifactId>
-        <version>3.0.1</version>
+        <version>3.0.2</version>
     </parent>
 
     <properties>
-        <common-tools.version>2.1.1</common-tools.version>
+        <common-tools.version>2.1.2</common-tools.version>
         <slf4j.version>1.7.5</slf4j.version>
         <lombok.version>1.18.10</lombok.version>
         <testng.version>6.14.3</testng.version>

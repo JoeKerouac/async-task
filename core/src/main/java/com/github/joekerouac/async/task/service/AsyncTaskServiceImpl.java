@@ -143,6 +143,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         engineConfig.setProcessorSupplier(asyncServiceConfig.getProcessorSupplier());
         engineConfig.setTraceService(asyncServiceConfig.getTraceService());
         engineConfig.setMonitorService(asyncServiceConfig.getMonitorService());
+        engineConfig.setLoadTaskFromRepository(asyncServiceConfig.isLoadTaskFromRepository());
         engineConfig.setTaskClearRunner(taskClearRunner);
         engineConfig.setProcessorGroup(processorGroup);
         engineConfig.setContain(contain);

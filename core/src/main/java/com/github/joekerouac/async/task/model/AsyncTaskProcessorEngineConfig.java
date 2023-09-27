@@ -80,4 +80,9 @@ public class AsyncTaskProcessorEngineConfig {
      */
     private MonitorService monitorService;
 
+    /**
+     * 本机启动后添加的任务（不包含本次启动之前添加的任务）执行完毕后，是否从任务仓库中捞取任务，true表示从任务仓库中捞取任务，此时也有可能会执行其他机器添加的任务；
+     */
+    private boolean loadTaskFromRepository = true;
+
 }

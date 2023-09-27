@@ -141,6 +141,11 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
      */
     private final boolean contain;
 
+    /**
+     * 本机启动后添加的任务（不包含本次启动之前添加的任务）执行完毕后，是否从任务仓库中捞取任务，true表示从任务仓库中捞取任务，此时也有可能会执行其他机器添加的任务；
+     */
+    private final boolean loadTaskFromRepository;
+
     public DefaultAsyncTaskProcessorEngine(AsyncTaskProcessorEngineConfig engineConfig) {
         Assert.notNull(engineConfig, "engineConfig不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Const.VALIDATION_SERVICE.validate(engineConfig);
@@ -154,6 +159,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         processors = new ConcurrentHashMap<>();
         this.processorGroup = Collections.unmodifiableSet(engineConfig.getProcessorGroup());
         this.contain = engineConfig.isContain();
+        this.loadTaskFromRepository = engineConfig.isLoadTaskFromRepository();
 
         // 队列中按照时间从小到大排序，如果指定时间一致，则任务创建IP与当前机器一致的在前
         queue = new TreeSet<>((o1, o2) -> {
@@ -298,43 +304,48 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         LOGGER.info("异步任务引擎准备启动...");
         start = true;
 
-        // 捞取异步任务的任务，注意：如果具体上次捞取为空时间没有到捞取时间时，不应该触发任务调度
-        loadTask = new SimpleSchedulerTask(() -> {
-            // 捞取未来指定时间内的任务
-            LocalDateTime now = LocalDateTime.now();
-            // 距离上次空捞取的时间间隔
-            long interval = System.currentTimeMillis() - lastEmptyLoad;
+        String taskName = "task-load";
+        if (loadTaskFromRepository) {
+            // 捞取异步任务的任务，注意：如果具体上次捞取为空时间没有到捞取时间时，不应该触发任务调度
+            loadTask = new SimpleSchedulerTask(() -> {
+                // 捞取未来指定时间内的任务
+                LocalDateTime now = LocalDateTime.now();
+                // 距离上次空捞取的时间间隔
+                long interval = System.currentTimeMillis() - lastEmptyLoad;
 
-            if (interval < executorConfig.getLoadInterval()) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("当前距离上次空捞取的时间间隔为 [{}ms] ，小于系统配置的最小空捞取间隔 [{}ms]，跳过", interval,
-                        executorConfig.getLoadInterval());
+                if (interval < executorConfig.getLoadInterval()) {
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("当前距离上次空捞取的时间间隔为 [{}ms] ，小于系统配置的最小空捞取间隔 [{}ms]，跳过", interval,
+                            executorConfig.getLoadInterval());
+                    }
+                    return;
                 }
-                return;
-            }
 
-            // 获取当前队列中的所有任务的ID列表
-            List<String> requestIds = LockTaskUtil.runWithLock(queueLock.readLock(),
-                () -> queue.stream().map(Pair::getKey).collect(Collectors.toList()));
+                // 获取当前队列中的所有任务的ID列表
+                List<String> requestIds = LockTaskUtil.runWithLock(queueLock.readLock(),
+                    () -> queue.stream().map(Pair::getKey).collect(Collectors.toList()));
 
-            // 这里捞取的任务应该不仅能填充队列剩余大小，还应该可以多捞取一些，因为存在这样的情况：本机缓存的任务都是未来将要执行的，而任务仓库中有大量其他
-            // 服务示例存储的当前要立即执行的任务，此时如果只捞取队列剩余空间数量的任务，可能会导致其他任务无法被捞取
-            int cacheQueueSize = executorConfig.getCacheQueueSize();
-            int loadSize = (cacheQueueSize - requestIds.size()) * 2 + 5;
-            loadSize = Math.min(loadSize, cacheQueueSize);
+                // 这里捞取的任务应该不仅能填充队列剩余大小，还应该可以多捞取一些，因为存在这样的情况：本机缓存的任务都是未来将要执行的，而任务仓库中有大量其他
+                // 服务示例存储的当前要立即执行的任务，此时如果只捞取队列剩余空间数量的任务，可能会导致其他任务无法被捞取
+                int cacheQueueSize = executorConfig.getCacheQueueSize();
+                int loadSize = (cacheQueueSize - requestIds.size()) * 2 + 5;
+                loadSize = Math.min(loadSize, cacheQueueSize);
 
-            // 从任务仓库中捞取任务
-            List<AsyncTask> tasks = repository.selectPage(ExecStatus.READY, now.plusSeconds(MAX_TIME), requestIds, 0,
-                loadSize, processorGroup, contain);
+                // 从任务仓库中捞取任务
+                List<AsyncTask> tasks = repository.selectPage(ExecStatus.READY, now.plusSeconds(MAX_TIME), requestIds,
+                    0, loadSize, processorGroup, contain);
 
-            if (tasks.isEmpty()) {
-                // 没有捞取到任务，记录下本次捞取
-                lastEmptyLoad = System.currentTimeMillis();
-            } else {
-                addTask(tasks);
-            }
+                if (tasks.isEmpty()) {
+                    // 没有捞取到任务，记录下本次捞取
+                    lastEmptyLoad = System.currentTimeMillis();
+                } else {
+                    addTask(tasks);
+                }
+            }, taskName, true);
+        } else {
+            loadTask = new SimpleSchedulerTask(() -> LOGGER.debug("当前配置的不从repository中捞取任务，忽略任务捞取调度"), taskName, true);
+        }
 
-        }, "task-load", true);
         loadTask.setFixedDelay(executorConfig.getLoadInterval());
         loadTask.start();
 
@@ -413,7 +424,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
      * @throws InterruptedException
      *             中断异常
      */
-    private void scheduler() throws InterruptedException {
+    protected void scheduler() throws InterruptedException {
         AsyncTask task = take();
         if (task == null) {
             return;
@@ -430,7 +441,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
      * @param task
      *            要执行的任务
      */
-    private void runTask(AsyncTask task) {
+    protected void runTask(AsyncTask task) {
         String taskRequestId = task.getRequestId();
 
         // 如果此时任务还不能执行，则将任务重新加到队列中
@@ -632,7 +643,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
     /**
      * 尝试加载数据
      */
-    private void tryLoad() {
+    protected void tryLoad() {
         // 判断当前队列大小，如果到达了捞取阈值则触发捞取
         if (queue.size() < executorConfig.getLoadThreshold()) {
             loadTask.scheduler();
