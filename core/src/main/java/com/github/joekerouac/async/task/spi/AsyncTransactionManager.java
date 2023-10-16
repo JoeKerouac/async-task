@@ -85,4 +85,12 @@ public interface AsyncTransactionManager {
      */
     void registerCallback(TransactionCallback callback) throws NoTransactionException;
 
+    /**
+     * 在事务执行完毕（执行成功）提交后执行，如果当前没有事务，则直接执行
+     * 
+     * @param task
+     *            要执行的任务
+     */
+    void runAfterCommit(Runnable task);
+
 }

@@ -146,6 +146,22 @@ public class AsyncTransactionManagerImpl implements AsyncTransactionManager {
         }
     }
 
+    @Override
+    public void runAfterCommit(Runnable task) {
+        if (isActualTransactionActive()) {
+            LOGGER.debug("当前在事务中，等待事务提交后执行");
+            registerCallback(new TransactionCallback() {
+                @Override
+                public void afterCommit() throws RuntimeException {
+                    task.run();
+                }
+            });
+        } else {
+            LOGGER.debug("当前不在事务中，直接执行");
+            task.run();
+        }
+    }
+
     /**
      * 决策出我们当前要使用的连接
      * 

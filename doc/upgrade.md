@@ -53,3 +53,7 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 # v3.0.2
 - 允许使用配置关闭任务调度；
 
+# v3.0.3
+- sql日志补充参数；
+- 执行引擎日志优化；
+- 任务取消执行后同步从内存队列中清除；

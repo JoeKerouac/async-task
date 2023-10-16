@@ -113,7 +113,6 @@ public abstract class AbstractRepository {
 
         insertBuilder.append(") values (").append(params).append(")");
         this.insert = insertBuilder.toString();
-
     }
 
     /**
@@ -139,8 +138,8 @@ public abstract class AbstractRepository {
         try {
             return transactionManager.run(requestId, connection -> {
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("当前sqlTemplate：[{}], 当前requestId: [{}] ,当前表名为：[{}], 当前数据源为: [{}]", sqlTemplate,
-                        requestId, tableName, connection);
+                    LOGGER.debug("当前sqlTemplate：[{}], 当前requestId: [{}] ,当前表名为：[{}], 当前数据源为: [{}], 参数: [{}]",
+                        sqlTemplate, requestId, tableName, connection, params);
                 }
                 PreparedStatement preparedStatement =
                     connection.prepareStatement(StringUtils.format(sqlTemplate, tableName));

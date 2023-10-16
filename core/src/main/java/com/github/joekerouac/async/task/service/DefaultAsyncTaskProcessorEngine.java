@@ -14,9 +14,11 @@ package com.github.joekerouac.async.task.service;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -300,6 +302,30 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
     }
 
     @Override
+    public void removeTask(Collection<String> taskRequestIds) {
+        if (taskRequestIds == null || taskRequestIds.isEmpty()) {
+            return;
+        }
+
+        Set<String> requestIds = new HashSet<>(taskRequestIds);
+        LockTaskUtil.runWithLock(queueLock.writeLock(), () -> {
+            List<Pair<String, AsyncTask>> removes = new ArrayList<>();
+            for (Pair<String, AsyncTask> pair : queue) {
+                if (requestIds.remove(pair.getKey())) {
+                    removes.add(pair);
+                }
+                if (requestIds.isEmpty()) {
+                    break;
+                }
+            }
+
+            // 直接将任务从队列移除，注意，可能会把第一个队列移除，导致调度唤醒时第一个任务变化，时间未到，不过没影响，调度可以继续等待
+            queue.removeAll(removes);
+        });
+
+    }
+
+    @Override
     public synchronized void start() {
         LOGGER.info("异步任务引擎准备启动...");
         start = true;
@@ -390,9 +416,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                     try {
                         scheduler();
                     } catch (Throwable throwable) {
-                        if (start || !(throwable instanceof InterruptedException)) {
-                            monitorService.uncaughtException(currentThread, throwable);
-                        }
+                        monitorService.uncaughtException(currentThread, throwable);
                     }
                 }
             }, StringUtils.getOrDefault(threadPoolConfig.getThreadName(), DEFAULT_THREAD_NAME) + "-" + i);
@@ -420,11 +444,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
     /**
      * 任务执行调度方法，每次调用都会从队列中获取一个当前可以执行的任务然后执行
-     *
-     * @throws InterruptedException
-     *             中断异常
      */
-    protected void scheduler() throws InterruptedException {
+    protected void scheduler() {
         AsyncTask task = take();
         if (task == null) {
             return;
@@ -442,6 +463,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
      *            要执行的任务
      */
     protected void runTask(AsyncTask task) {
+        LOGGER.info("准备执行任务: [{}]", task);
+
         String taskRequestId = task.getRequestId();
 
         // 如果此时任务还不能执行，则将任务重新加到队列中
@@ -453,8 +476,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         if (l > 0) {
             // 理论上不会出现
             LOGGER.warn("任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", task, now);
-            // 将任务解锁，重新设置为READY状态
-            task.setStatus(ExecStatus.READY);
+            // 注意，这里是专门设计为更新数据库而不把任务加入缓存的，防止任务加入队列中后立即再次到这里
             repository.update(taskRequestId, ExecStatus.READY, null, null, null, null);
             return;
         }
@@ -506,11 +528,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         // 是否还需要retry
         boolean retry = false;
 
+        LOGGER.info(throwable, "任务执行结果：[{}:{}:{}]", requestId, result, context);
         try {
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(throwable, "任务执行结果：[{}:{}:{}]", requestId, result, context);
-            }
-
             switch (result) {
                 case SUCCESS:
                     finishTask(repository, processor, requestId, context, TaskFinishCode.SUCCESS, null, cache);
@@ -565,7 +584,6 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                 traceService.finish(traceScope, retry, result, throwable);
             }
         }
-
     }
 
     /**
@@ -608,12 +626,10 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             return null;
         }
 
-        AsyncTask task;
         // 锁定任务，使用CAS更新的形式来完成
-        int casUpdateResult = repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP);
-        while (casUpdateResult <= 0) {
+        while (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP) <= 0) {
             // 如果CAS更新失败，则从数据库刷新任务，看任务是否已经不一致了
-            task = repository.selectByRequestId(taskRequestId);
+            AsyncTask task = repository.selectByRequestId(taskRequestId);
             ExecStatus status = task.getStatus();
 
             // 如果任务已经不是READY状态，那么就无需处理了
@@ -624,20 +640,16 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
                 String execIp = task.getExecIp();
                 // 理论上不应该出现
-                if (Objects.equals(execIp, Const.IP)) {
+                if (Objects.equals(execIp, Const.IP) && task.getTaskFinishCode() != TaskFinishCode.CANCEL) {
                     LOGGER.warn("当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]", status, task);
                 }
 
                 return null;
             }
-
-            // 继续尝试CAS，一般来说走不到这里，因为上边CAS更新失败应该是任务状态已经变更或者有其他并发线程/进程已经将该任务状态更新了
-            casUpdateResult = repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP);
         }
 
         // 任务锁定后从数据库刷新任务状态，因为内存中的可能已经不对了
-        task = repository.selectByRequestId(taskRequestId);
-        return task;
+        return repository.selectByRequestId(taskRequestId);
     }
 
     /**

@@ -41,7 +41,6 @@ import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.TraceService;
-import com.github.joekerouac.async.task.spi.TransactionCallback;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
@@ -253,6 +252,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             } else {
                 // cas取消成功就返回，否则继续循环
                 if (config.getRepository().casCancel(requestId, task.getStatus(), Const.IP) > 0) {
+                    removeTaskFromEngineAfterTransCommit(task);
                     return CancelStatus.SUCCESS;
                 } else {
                     LOGGER.info("任务取消失败，当前任务状态: [{}:{}]", requestId, task.getStatus());
@@ -323,25 +323,21 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     private void addTaskToEngineAfterTransCommit(AsyncTask asyncTask) {
         Runnable callback = () -> {
             getEngine(asyncTask.getProcessor()).addTask(Collections.singletonList(asyncTask));
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("将任务[{}]添加到内存队列中", asyncTask);
-            }
+            LOGGER.info("将任务[{}]添加到内存队列中", asyncTask);
+        };
+
+        config.getTransactionManager().runAfterCommit(callback);
+    }
+
+    private void removeTaskFromEngineAfterTransCommit(AsyncTask asyncTask) {
+        Runnable callback = () -> {
+            getEngine(asyncTask.getProcessor()).removeTask(Collections.singletonList(asyncTask.getRequestId()));
+            LOGGER.info("将任务[{}]从内存队列中移除", asyncTask);
         };
 
         // 如果当前没有事务，直接执行回调就行了
-        if (!config.getTransactionManager().isActualTransactionActive()) {
-            LOGGER.debug("当前不在事务中，直接将任务提交到任务执行引擎");
-            callback.run();
-            return;
-        } else {
-            LOGGER.debug("当前在事务中，等待事务提交后将任务提交到任务执行引擎");
-            config.getTransactionManager().registerCallback(new TransactionCallback() {
-                @Override
-                public void afterCommit() throws RuntimeException {
-                    callback.run();
-                }
-            });
-        }
+        config.getTransactionManager().runAfterCommit(callback);
+
     }
 
     private AsyncTaskProcessorEngine getEngine(String processor) {

@@ -68,4 +68,12 @@ public interface AsyncTaskProcessorEngine {
      *            要添加的任务
      */
     void addTask(Collection<AsyncTask> tasks);
+
+    /**
+     * 从缓存移除指定任务
+     * 
+     * @param taskRequestIds
+     *            要移除的任务的requestId集合
+     */
+    void removeTask(Collection<String> taskRequestIds);
 }
