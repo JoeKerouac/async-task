@@ -78,4 +78,8 @@ public class MonitorServiceAdaptor implements MonitorService {
             .warn("任务执行超时，execIp: [{}], timeout: [{}], tasks: [{}]", ip, timeout, taskList));
     }
 
+    @Override
+    public void taskReExec(AsyncTask task) {
+        DEFAULT_ASYNC_MONITOR_LOGGER.warn("任务执行超时，自动重试，execIp: [{}], tasks: [{}]", task.getExecIp(), task);
+    }
 }

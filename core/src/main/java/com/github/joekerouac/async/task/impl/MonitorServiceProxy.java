@@ -95,6 +95,13 @@ public final class MonitorServiceProxy implements MonitorService {
         }
     }
 
+    @Override
+    public void taskReExec(AsyncTask task) {
+        if (monitorService != null) {
+            runWithoutEx(() -> monitorService.taskReExec(task));
+        }
+    }
+
     /**
      * 执行指定命令，并且不抛出异常
      *

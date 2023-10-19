@@ -57,3 +57,4 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 - sql日志补充参数；
 - 执行引擎日志优化；
 - 任务取消执行后同步从内存队列中清除；
+- 任务执行超时后允许重新执行，默认不允许，如果允许，将会有并行执行和重复执行的风险；

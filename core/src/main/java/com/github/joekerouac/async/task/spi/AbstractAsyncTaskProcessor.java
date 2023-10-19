@@ -88,6 +88,19 @@ public abstract class AbstractAsyncTaskProcessor<T> {
         @NotNull Map<String, Object> cache) throws Throwable;
 
     /**
+     * 如果任务执行超时，是否允许重启
+     * 
+     * @param requestId
+     *            任务幂等ID
+     * @param context
+     *            任务
+     * @return true表示不允许重启，此时只能人工介入排查，对于无法幂等的任务建议返回false
+     */
+    public boolean canReExec(String requestId, @NotNull T context) {
+        return false;
+    }
+
+    /**
      * 该处理器可以处理的任务类型
      * 
      * @return 该处理器可以处理的任务类型数组，不能返回null

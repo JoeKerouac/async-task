@@ -123,4 +123,12 @@ public interface MonitorService {
      */
     void taskExecTimeout(List<AsyncTask> tasks, long timeout);
 
+    /**
+     * 任务执行超时，并且当前允许直接重新执行，重新执行
+     * 
+     * @param task
+     *            任务
+     */
+    void taskReExec(AsyncTask task);
+
 }

@@ -389,6 +389,34 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                     LocalDateTime execTime =
                         LocalDateTime.now().plus(-executorConfig.getExecTimeout(), ChronoUnit.MILLIS);
                     List<AsyncTask> tasks = repository.stat(execTime);
+                    for (AsyncTask task : tasks) {
+                        // 查找任务处理器
+                        AbstractAsyncTaskProcessor<Object> processor = getProcessor(task.getProcessor());
+
+                        if (processor == null) {
+                            continue;
+                        }
+
+                        String requestId = task.getRequestId();
+                        Map<String, Object> cache = new HashMap<>();
+
+                        // 解析数据
+                        Object context;
+                        try {
+                            context = processor.deserialize(requestId, task.getTask(), cache);
+                        } catch (Throwable throwable) {
+                            continue;
+                        }
+
+                        if (!processor.canReExec(requestId, context)) {
+                            continue;
+                        }
+
+                        // 任务更新为ready重新执行，这里不关心是否设置成功，失败了后续还会轮询到
+                        repository.casUpdate(requestId, ExecStatus.RUNNING, ExecStatus.READY, Const.IP);
+                        monitorService.taskReExec(task);
+                    }
+
                     if (!tasks.isEmpty()) {
                         monitorService.taskExecTimeout(tasks, executorConfig.getExecTimeout());
                     }
