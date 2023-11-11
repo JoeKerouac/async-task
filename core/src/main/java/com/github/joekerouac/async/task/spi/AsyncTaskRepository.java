@@ -102,29 +102,6 @@ public interface AsyncTaskRepository {
         Integer retry, String ip);
 
     /**
-     * 根据任务状态和执行时间查询任务，任务状态应该与传入状态一致，任务的执行时间应该小于等于传入的执行时间，任务应该按照执行时间升序排序，执行时间靠前的优先返回；
-     *
-     * @param status
-     *            任务状态，不能为空；
-     * @param dateTime
-     *            指定执行时间；
-     * @param skipTaskRequestIds
-     *            需要跳过的任务request id集合，查询时应该从结果集中跳过这些ID
-     * @param offset
-     *            分页offset
-     * @param limit
-     *            分页大小
-     * @param processorGroup
-     *            processor分组
-     * @param contain
-     *            true表示查询的指定的processor分组的任务，false表示查询所有非processor分组中的任务
-     * @return 符合条件的数据
-     */
-    List<AsyncTask> selectPage(@NotNull ExecStatus status, @NotNull LocalDateTime dateTime,
-        @NotNull Collection<String> skipTaskRequestIds, @Min(0) int offset, @Min(1) @Max(200) int limit,
-        @NotNull Set<String> processorGroup, boolean contain);
-
-    /**
      * 根据结束码查询指定截止日期前执行完毕的任务
      * 
      * @param processor
@@ -149,7 +126,7 @@ public interface AsyncTaskRepository {
      *            requestId
      * @return 删除结果
      */
-    int delete(List<String> requestIds);
+    int delete(Set<String> requestIds);
 
     /**
      * 统计状态为执行中、并且执行时间在指定时间之前的任务
@@ -159,5 +136,27 @@ public interface AsyncTaskRepository {
      * @return 任务列表
      */
     List<AsyncTask> stat(LocalDateTime execTime);
+
+    /**
+     * 根据任务状态和执行时间查询任务，任务状态应该与传入状态一致，任务的执行时间应该小于等于传入的执行时间，任务应该按照执行时间升序排序，执行时间靠前的优先返回；
+     *
+     * @param status
+     *            任务状态，不能为空；
+     * @param dateTime
+     *            指定执行时间；
+     * @param skipTaskRequestIds
+     *            需要跳过的任务request id集合，查询时应该从结果集中跳过这些ID
+     * @param offset
+     *            分页offset
+     * @param limit
+     *            分页大小
+     * @param processorGroup
+     *            processor分组
+     * @param contain
+     *            true表示查询的指定的processor分组的任务，false表示查询所有非processor分组中的任务
+     * @return 符合条件的数据
+     */
+    List<AsyncTask> selectPage(ExecStatus status, LocalDateTime dateTime, Collection<String> skipTaskRequestIds,
+        int offset, int limit, Set<String> processorGroup, boolean contain);
 
 }

@@ -710,7 +710,7 @@ public class FlowServiceImpl implements FlowService {
             StringUtils.getOrDefault(model.getProcessor(), model.getData().getClass().getSimpleName());
         AbstractAsyncTaskProcessor<?> processor = processors.get(processorName);
         if (processor == null && processorSupplier != null) {
-            processor = processorSupplier.get(processorName);
+            processor = processorSupplier.getProcessor(processorName);
             if (processor != null) {
                 addProcessor(processor);
             }

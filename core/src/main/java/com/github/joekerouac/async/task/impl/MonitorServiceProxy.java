@@ -75,13 +75,6 @@ public final class MonitorServiceProxy implements MonitorService {
     }
 
     @Override
-    public void monitor(final int queueSize) {
-        if (monitorService != null) {
-            runWithoutEx(() -> monitorService.monitor(queueSize));
-        }
-    }
-
-    @Override
     public void uncaughtException(final Thread thread, final Throwable e) {
         if (monitorService != null) {
             runWithoutEx(() -> monitorService.uncaughtException(thread, e));

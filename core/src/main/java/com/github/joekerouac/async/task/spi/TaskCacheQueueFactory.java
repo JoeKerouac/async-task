@@ -12,22 +12,22 @@
  */
 package com.github.joekerouac.async.task.spi;
 
+import com.github.joekerouac.async.task.model.TaskQueueConfig;
+
 /**
- * 处理器提供者
- *
  * @author JoeKerouac
- * @date 2023-01-06 11:28
- * @since 1.0.0
+ * @date 2023-11-11 14:12
+ * @since 4.0.0
  */
-public interface ProcessorSupplier {
+public interface TaskCacheQueueFactory {
 
     /**
-     * 获取processor
-     *
-     * @param taskType
-     *            task type
-     * @return 指定task type对应的processor，不存在时返回null
+     * 构建任务队列
+     * 
+     * @param config
+     *            任务队列配置
+     * @return 任务队列
      */
-    <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String taskType);
+    TaskCacheQueue build(TaskQueueConfig config, AsyncTaskRepository asyncTaskRepository);
 
 }

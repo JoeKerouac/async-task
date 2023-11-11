@@ -14,14 +14,17 @@ package com.github.joekerouac.async.task.service;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.ProcessorRegistry;
 
 import lombok.CustomLog;
 
@@ -45,42 +48,30 @@ public class TaskClearRunner extends AbstractClearRunner {
      */
     private final AsyncTaskRepository asyncTaskRepository;
 
-    /**
-     * 任务清理说明，key是任务所属processor，value是任务保留最短时间，单位小时
-     */
-    private final Map<String, Integer> clearDescMap;
+    private final ProcessorRegistry processorRegistry;
 
-    public TaskClearRunner(final AsyncTaskRepository asyncTaskRepository) {
+    public TaskClearRunner(final AsyncTaskRepository asyncTaskRepository, ProcessorRegistry processorRegistry) {
         this.asyncTaskRepository = asyncTaskRepository;
-        this.clearDescMap = new ConcurrentHashMap<>();
-    }
-
-    /**
-     * 添加待清除的任务说明
-     * 
-     * @param processor
-     *            要清理的任务所属的processor
-     * @param reserve
-     *            任务执行完成后最短保留时间，单位小时
-     */
-    public void addClearDesc(String processor, int reserve) {
-        clearDescMap.put(processor, reserve);
-    }
-
-    /**
-     * 移除待清除的任务说明
-     * 
-     * @param processor
-     *            任务所属的processor
-     */
-    public void removeClearDesc(String processor) {
-        clearDescMap.remove(processor);
+        this.processorRegistry = processorRegistry;
     }
 
     /**
      * 清除指定状态的数据
      */
     protected void clear() {
+        Set<String> allTaskType = processorRegistry.getAllTaskType();
+        if (allTaskType.isEmpty()) {
+            return;
+        }
+
+        Map<String, Integer> clearDescMap = new HashMap<>();
+        for (String taskType : allTaskType) {
+            AbstractAsyncTaskProcessor<Object> processor = processorRegistry.getProcessor(taskType);
+            if (processor != null) {
+                clearDescMap.put(taskType, processor.reserve());
+            }
+        }
+
         clearDescMap.forEach((processor, reserve) -> {
             boolean hasNext = true;
 
@@ -94,7 +85,7 @@ public class TaskClearRunner extends AbstractClearRunner {
                 }
 
                 final int delete = asyncTaskRepository
-                    .delete(asyncTasks.stream().map(AsyncTask::getRequestId).collect(Collectors.toList()));
+                    .delete(asyncTasks.stream().map(AsyncTask::getRequestId).collect(Collectors.toSet()));
 
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("当前要删除 [{}] 条数据，实际删除 [{}]条，当前任务清理说明: [{}:{}]， 当前要删除的数据列表： [{}]", asyncTasks.size(),

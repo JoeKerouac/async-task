@@ -30,7 +30,7 @@
     <parent>
         <groupId>com.github.JoeKerouac</groupId>
         <artifactId>async-task</artifactId>
-        <version>3.0.3</version>
+        <version>4.0.0-SNAPSHOT</version>
     </parent>
 
     <properties>

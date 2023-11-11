@@ -12,21 +12,26 @@
  */
 package com.github.joekerouac.async.task.model;
 
-import javax.validation.Valid;
+import java.util.Set;
+
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
 import lombok.Data;
 
 /**
- * 异步任务执行配置
- *
  * @author JoeKerouac
- * @date 2023-03-24 14:22
- * @since 3.0.0
+ * @date 2023-11-09 17:40
+ * @since 4.0.0
  */
 @Data
-public class AsyncTaskExecutorConfig {
+public class TaskQueueConfig {
+
+    /**
+     * 当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒
+     */
+    @Min(value = 0, message = "上次任务捞取为空时下次任务捞取的最小时间间隔不能小于0")
+    private long loadInterval = 1000 * 5;
 
     /**
      * 任务缓存队列大小，0表示队列无限长，队列设置太小可能会影响性能；
@@ -41,34 +46,19 @@ public class AsyncTaskExecutorConfig {
     private int loadThreshold = 30;
 
     /**
-     * 当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从{@link com.github.joekerouac.async.task.spi.AsyncTaskRepository}中没有获取到任务后必
-     * 须等待该时间间隔后才能再次捞取，单位毫秒
-     */
-    @Min(value = 0, message = "上次任务捞取为空时下次任务捞取的最小时间间隔不能小于0")
-    private long loadInterval = 1000 * 5;
-
-    /**
-     * 触发任务执行超时监控的时间间隔，单位毫秒
-     */
-    @Min(value = 500, message = "监控间隔不能小于500")
-    private long monitorInterval = 1000 * 5;
-
-    /**
-     * 任务执行超时监控时间，单位毫秒，如果任务执行超过该时间将会触发监控
-     */
-    @Min(value = 100, message = "任务执行超时监控时间不能小于100")
-    private long execTimeout = 1000 * 5;
-
-    /**
      * 本机启动后添加的任务（不包含本次启动之前添加的任务）执行完毕后，是否从任务仓库中捞取任务，true表示从任务仓库中捞取任务，此时也有可能会执行其他机器添加的任务；
      */
     private boolean loadTaskFromRepository = true;
 
     /**
-     * 实际执行任务的线程池配置
+     * processor name列表
      */
-    @NotNull(message = "实际执行任务的线程池配置不能为null")
-    @Valid
-    private AsyncThreadPoolConfig threadPoolConfig = new AsyncThreadPoolConfig();
+    @NotNull
+    private Set<String> taskTypeGroup;
+
+    /**
+     * true表示异步任务引擎只处理{@link #taskTypeGroup}中包含的任务，false表示异步任务处理引擎不应该处理{@link #taskTypeGroup}中包含的任务，而应该处理所有其他任务
+     */
+    private boolean contain;
 
 }

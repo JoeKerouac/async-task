@@ -81,6 +81,17 @@ public class AsyncServiceConfigModel {
         private long monitorInterval = 1000 * 5;
 
         /**
+         * 任务执行超时监控时间，单位毫秒，如果任务执行超过该时间将会触发监控
+         */
+        @Min(value = 100, message = "任务执行超时监控时间不能小于100")
+        private long execTimeout = 1000 * 5;
+
+        /**
+         * 本机启动后添加的任务（不包含本次启动之前添加的任务）执行完毕后，是否从任务仓库中捞取任务，true表示从任务仓库中捞取任务，此时也有可能会执行其他机器添加的任务；
+         */
+        private boolean loadTaskFromRepository = true;
+
+        /**
          * 实际执行任务的线程池配置
          */
         @NotNull(message = "实际执行任务的线程池配置不能为null")

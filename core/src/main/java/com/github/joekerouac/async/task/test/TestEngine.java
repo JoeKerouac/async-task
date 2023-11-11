@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import javax.sql.DataSource;
 
+import com.github.joekerouac.async.task.impl.DefaultTaskCacheQueueFactory;
 import org.testng.Assert;
 
 import com.alibaba.druid.pool.DruidDataSource;
@@ -79,10 +80,10 @@ public class TestEngine {
 
         repository = new AsyncTaskRepositoryImpl(transactionManager);
         asyncServiceConfig = new AsyncServiceConfig();
-        asyncServiceConfig.setRepository(repository);
         asyncServiceConfig.setDefaultExecutorConfig(new AsyncTaskExecutorConfig());
-        asyncServiceConfig.setIdGenerator(() -> UUID.randomUUID().toString());
         asyncServiceConfig.setTransactionManager(transactionManager);
+        asyncServiceConfig.setRepository(repository);
+        asyncServiceConfig.setIdGenerator(() -> UUID.randomUUID().toString());
 
         AsyncTaskService service = new AsyncTaskServiceImpl(asyncServiceConfig);
         service.start();

@@ -10,24 +10,22 @@
  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
-package com.github.joekerouac.async.task.spi;
+package com.github.joekerouac.async.task.impl;
+
+import com.github.joekerouac.async.task.model.TaskQueueConfig;
+import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.TaskCacheQueue;
+import com.github.joekerouac.async.task.spi.TaskCacheQueueFactory;
 
 /**
- * 处理器提供者
- *
  * @author JoeKerouac
- * @date 2023-01-06 11:28
- * @since 1.0.0
+ * @date 2023-11-11 14:13
+ * @since 4.0.0
  */
-public interface ProcessorSupplier {
+public class DefaultTaskCacheQueueFactory implements TaskCacheQueueFactory {
 
-    /**
-     * 获取processor
-     *
-     * @param taskType
-     *            task type
-     * @return 指定task type对应的processor，不存在时返回null
-     */
-    <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String taskType);
+    public TaskCacheQueue build(TaskQueueConfig config, AsyncTaskRepository repository) {
+        return new DefaultTaskCacheQueue(config, repository);
+    }
 
 }

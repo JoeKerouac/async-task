@@ -28,9 +28,8 @@ import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
-import com.github.joekerouac.async.task.spi.TableNameSelector;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
-import com.github.joekerouac.common.tools.collection.CollectionUtil;
+import com.github.joekerouac.async.task.spi.TableNameSelector;
 import com.github.joekerouac.common.tools.constant.StringConst;
 import com.github.joekerouac.common.tools.db.SqlUtil;
 import com.github.joekerouac.common.tools.exception.ExceptionUtil;
@@ -82,7 +81,8 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
 
     public AsyncTaskRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager,
         @NotNull final TableNameSelector tableNameSelector) {
-        super(transactionManager, tableNameSelector, AsyncTask.class);
+        super(transactionManager, tableNameSelector == null ? task -> DEFAULT_TABLE_NAME : tableNameSelector,
+            AsyncTask.class);
     }
 
     @Override
@@ -179,6 +179,45 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     }
 
     @Override
+    public List<AsyncTask> selectFinishPage(final String processor, final TaskFinishCode finishCode,
+        final LocalDateTime dateTime, final int offset, final int limit) {
+        Object[] params = new Object[5];
+        int start = 0;
+        params[start++] = processor;
+        params[start++] = finishCode;
+        params[start++] = dateTime;
+        params[start++] = limit;
+        params[start] = offset;
+
+        return runSql(null, SQL_SELECT_FINISH_PAGE, preparedStatement -> {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            return buildModel(resultSet);
+        }, params);
+
+    }
+
+    @Override
+    public int delete(final Set<String> requestIds) {
+        if (requestIds == null || requestIds.isEmpty()) {
+            return 0;
+        }
+
+        String requestId = requestIds.iterator().next();
+        String paramsPlaceholder = generatePlaceholder(requestIds.size());
+
+        return runSql(requestId, SQL_DELETE.replace(PLACEHOLDER, paramsPlaceholder.substring(1)),
+            PreparedStatement::executeUpdate, requestIds.toArray());
+    }
+
+    @Override
+    public List<AsyncTask> stat(LocalDateTime execTime) {
+        return runSql(null, SQL_STAT, preparedStatement -> {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            return buildModel(resultSet);
+        }, new Object[] {execTime});
+    }
+
+    @Override
     public List<AsyncTask> selectPage(ExecStatus status, LocalDateTime dateTime, Collection<String> skipTaskRequestIds,
         int offset, int limit, Set<String> processorGroup, boolean contain) {
         String dynamic = StringConst.EMPTY;
@@ -217,44 +256,6 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
                 return buildModel(resultSet);
             }, params);
         }
-    }
-
-    @Override
-    public List<AsyncTask> selectFinishPage(final String processor, final TaskFinishCode finishCode,
-        final LocalDateTime dateTime, final int offset, final int limit) {
-        Object[] params = new Object[5];
-        int start = 0;
-        params[start++] = processor;
-        params[start++] = finishCode;
-        params[start++] = dateTime;
-        params[start++] = limit;
-        params[start] = offset;
-
-        return runSql(null, SQL_SELECT_FINISH_PAGE, preparedStatement -> {
-            ResultSet resultSet = preparedStatement.executeQuery();
-            return buildModel(resultSet);
-        }, params);
-
-    }
-
-    @Override
-    public int delete(final List<String> requestIds) {
-        if (CollectionUtil.isEmpty(requestIds)) {
-            return 0;
-        }
-
-        String paramsPlaceholder = generatePlaceholder(requestIds.size());
-
-        return runSql(requestIds.get(0), SQL_DELETE.replace(PLACEHOLDER, paramsPlaceholder.substring(1)),
-            PreparedStatement::executeUpdate, requestIds.toArray());
-    }
-
-    @Override
-    public List<AsyncTask> stat(LocalDateTime execTime) {
-        return runSql(null, SQL_STAT, preparedStatement -> {
-            ResultSet resultSet = preparedStatement.executeQuery();
-            return buildModel(resultSet);
-        }, new Object[] {execTime});
     }
 
     /**

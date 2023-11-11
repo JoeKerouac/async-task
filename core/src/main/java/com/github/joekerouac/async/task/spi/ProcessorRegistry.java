@@ -12,22 +12,44 @@
  */
 package com.github.joekerouac.async.task.spi;
 
+import java.util.Set;
+
 /**
- * 处理器提供者
- *
  * @author JoeKerouac
- * @date 2023-01-06 11:28
- * @since 1.0.0
+ * @date 2023-11-09 17:04
+ * @since 4.0.0
  */
-public interface ProcessorSupplier {
+public interface ProcessorRegistry extends ProcessorSupplier {
 
     /**
-     * 获取processor
-     *
+     * 注册processor
+     * 
      * @param taskType
      *            task type
-     * @return 指定task type对应的processor，不存在时返回null
+     * @param processor
+     *            对应的处理器
+     * @return 老的处理器，如果不存在则返回null
      */
-    <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String taskType);
+    AbstractAsyncTaskProcessor<?> registerProcessor(String taskType, AbstractAsyncTaskProcessor<?> processor);
+
+    /**
+     * 移除指定处理器
+     * 
+     * @param taskType
+     *            taskType
+     * @param <T>
+     *            处理器任务类型
+     * @param <P>
+     *            处理器类型
+     * @return 处理器
+     */
+    <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(final String taskType);
+
+    /**
+     * 获取所有任务类型
+     * 
+     * @return 所有任务类型
+     */
+    Set<String> getAllTaskType();
 
 }

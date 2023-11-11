@@ -96,14 +96,6 @@ public interface MonitorService {
     void deserializationError(String requestId, String task, Object processor, Throwable throwable);
 
     /**
-     * 当前队列中任务数量，每个一段时间该方法都会被调用一次
-     * 
-     * @param queueSize
-     *            当前队列中任务数量
-     */
-    void monitor(int queueSize);
-
-    /**
      * 异步任务线程未处理异常，通常不应该有
      *
      * @param thread

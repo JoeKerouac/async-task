@@ -279,7 +279,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
 
             // TODO 待优化
             if (processor == null && processorSupplier != null) {
-                processor = processorSupplier.get(taskNode.getProcessor());
+                processor = processorSupplier.getProcessor(taskNode.getProcessor());
             }
 
             // 注意，找不到处理器时抛出异常，等待重试，因为可能时发布过程中的不兼容问题导致的，可能给个机会调度到最新代码的机器上就可以执行了

@@ -55,31 +55,26 @@ public abstract class AbstractRepository {
     /**
      * 事务管理器
      */
-    private AsyncTransactionManager transactionManager;
+    protected final AsyncTransactionManager transactionManager;
 
     /**
      * 表名选择器，允许用户选择当前使用哪个表，这样用户就有机会来做分库分表
      */
-    private TableNameSelector tableNameSelector;
+    protected final TableNameSelector tableNameSelector;
 
     /**
      * 对应的模型类型
      */
-    private Class<?> modelType;
+    protected final Class<?> modelType;
 
     /**
      * 字段名与字段的映射
      */
-    private LinkedHashMap<String, Field> fieldMap;
+    protected final LinkedHashMap<String, Field> fieldMap;
 
-    private String insert;
+    protected final String insert;
 
     public AbstractRepository(@NotNull final AsyncTransactionManager transactionManager,
-        @NotNull final TableNameSelector tableNameSelector, Class<?> modelType) {
-        init(transactionManager, tableNameSelector, modelType);
-    }
-
-    protected void init(@NotNull final AsyncTransactionManager transactionManager,
         @NotNull final TableNameSelector tableNameSelector, Class<?> modelType) {
         this.transactionManager = transactionManager;
         this.tableNameSelector = tableNameSelector;
@@ -113,6 +108,7 @@ public abstract class AbstractRepository {
 
         insertBuilder.append(") values (").append(params).append(")");
         this.insert = insertBuilder.toString();
+
     }
 
     /**

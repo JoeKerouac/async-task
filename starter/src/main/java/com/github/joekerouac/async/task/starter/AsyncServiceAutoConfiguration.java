@@ -14,8 +14,8 @@ package com.github.joekerouac.async.task.starter;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -26,14 +26,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.db.AsyncTransactionManagerImpl;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
+import com.github.joekerouac.async.task.impl.DefaultTaskCacheQueueFactory;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
@@ -45,7 +48,9 @@ import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.ConnectionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
+import com.github.joekerouac.async.task.spi.ProcessorRegistry;
 import com.github.joekerouac.async.task.spi.ProcessorSupplier;
+import com.github.joekerouac.async.task.spi.TaskCacheQueueFactory;
 import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel;
@@ -61,16 +66,24 @@ import lombok.CustomLog;
  */
 @CustomLog
 @EnableConfigurationProperties({AsyncServiceConfigModel.class})
-public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
+public class AsyncServiceAutoConfiguration
+    implements ApplicationContextAware, ApplicationListener<ApplicationStartedEvent> {
 
     private ApplicationContext context;
+
+    @Override
+    public void onApplicationEvent(ApplicationStartedEvent event) {
+        // 应用启动起来后再启动异步任务系统
+        AsyncTaskService asyncTaskService = context.getBean(AsyncTaskService.class);
+        asyncTaskService.start();
+    }
 
     @Override
     public void setApplicationContext(final ApplicationContext applicationContext) throws BeansException {
         this.context = applicationContext;
     }
 
-    @Bean(initMethod = "start", destroyMethod = "stop")
+    @Bean(destroyMethod = "stop")
     @ConditionalOnMissingBean
     public AsyncTaskService asyncTaskService(@Autowired AsyncServiceConfig config) {
         return new AsyncTaskServiceImpl(config);
@@ -78,70 +91,40 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public ProcessorSupplier processorSupplier() {
-        return new ProcessorSupplier() {
+    public ProcessorRegistry processorRegistry() {
+        return new ProcessorRegistry() {
 
             volatile Map<String, AbstractAsyncTaskProcessor<?>> processors;
 
-            volatile Map<String, AbstractAsyncTaskProcessor<?>> earlyInitProcessors = new ConcurrentHashMap<>();
-
-            @SuppressWarnings({"unchecked"})
             @Override
-            public <T, P extends AbstractAsyncTaskProcessor<T>> P get(String processorName) {
-                P p = getFromEarly(processorName);
-                if (p != null) {
-                    return p;
-                }
-
-                // 到了这里，我们就只能初始化所有的processor了
+            public AbstractAsyncTaskProcessor<?> registerProcessor(String taskType,
+                AbstractAsyncTaskProcessor<?> processor) {
                 if (processors == null) {
                     init();
                 }
 
-                return (P)processors.get(processorName);
+                return processors.put(taskType, processor);
             }
 
-            /**
-             * 我们尽量只初始化单个processor，一般来说我们的processor都是processor name + 固定的Processor，所以这里都能搜索到，这样其他processor就不用提前初始化了
-             *
-             * @param processorName
-             *            processor name
-             * @param <T>
-             *            processor处理的任务真实类型
-             * @param <P>
-             *            processor真实类型
-             * @return processor，可能为null
-             */
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            private <T, P extends AbstractAsyncTaskProcessor<T>> P getFromEarly(String processorName) {
-                Map<String, AbstractAsyncTaskProcessor<?>> earlyInitProcessors = this.earlyInitProcessors;
-                if (earlyInitProcessors != null) {
-                    P p = (P)earlyInitProcessors.compute(processorName, (key, value) -> {
-                        if (value != null) {
-                            return value;
-                        }
+            @SuppressWarnings("unchecked")
+            @Override
+            public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(String taskType) {
+                return processors == null ? null : (P)processors.remove(taskType);
+            }
 
-                        String[] beanNames = context.getBeanNamesForType(AbstractAsyncTaskProcessor.class);
-                        for (String beanName : beanNames) {
-                            if (beanName.toLowerCase().startsWith(processorName.toLowerCase())) {
-                                AbstractAsyncTaskProcessor processor =
-                                    context.getBean(beanName, AbstractAsyncTaskProcessor.class);
-                                for (String s : processor.processors()) {
-                                    if (Objects.equals(s, processorName)) {
-                                        return processor;
-                                    }
-                                }
-                            }
-                        }
-                        return null;
-                    });
+            @Override
+            public Set<String> getAllTaskType() {
+                return processors == null ? Collections.emptySet() : new HashSet<>(processors.keySet());
+            }
 
-                    if (p != null) {
-                        return p;
-                    }
+            @SuppressWarnings("unchecked")
+            @Override
+            public <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String taskType) {
+                if (processors == null) {
+                    init();
                 }
 
-                return null;
+                return (P)processors.get(taskType);
             }
 
             @SuppressWarnings("rawtypes")
@@ -159,10 +142,8 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
                     }
                 }
 
-                this.processors = Collections.unmodifiableMap(processors);
-                earlyInitProcessors = null;
+                this.processors = new ConcurrentHashMap<>(processors);
             }
-
         };
     }
 
@@ -171,6 +152,7 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
     public AsyncServiceConfig asyncServiceConfig(@Autowired AsyncServiceConfigModel asyncServiceConfigModel,
         @Autowired AsyncTaskProcessorEngineFactory engineFactory, @Autowired AsyncTaskRepository asyncTaskRepository,
         @Autowired IDGenerator asyncIdGenerator, @Autowired AsyncTransactionManager asyncTransactionManager,
+        @Autowired TaskCacheQueueFactory taskCacheQueueFactory, @Autowired ProcessorRegistry processorRegistry,
         @Autowired(required = false) MonitorService monitorService,
         @Autowired(required = false) TraceService traceService,
         @Autowired(required = false) ProcessorSupplier processorSupplier,
@@ -179,15 +161,16 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
             asyncTransactionManager, monitorService);
 
         AsyncServiceConfig config = new AsyncServiceConfig();
-        config.setRepository(asyncTaskRepository);
         config.setTransactionManager(asyncTransactionManager);
+        config.setRepository(asyncTaskRepository);
+        config.setTaskCacheQueueFactory(taskCacheQueueFactory);
         config.setIdGenerator(asyncIdGenerator);
+        config.setEngineFactory(engineFactory);
+        config.setProcessorRegistry(processorRegistry);
         config.setMonitorService(monitorService);
         config.setTraceService(traceService);
-        config.setProcessorSupplier(processorSupplier);
+
         config.setDefaultExecutorConfig(convert(asyncServiceConfigModel.getDefaultExecutorConfig()));
-        config.setEngineFactory(engineFactory);
-        config.setLoadTaskFromRepository(loadTaskFromRepository);
 
         Map<Set<String>, AsyncServiceConfigModel.Config> configs = asyncServiceConfigModel.getExecutorConfigs();
         Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = new HashMap<>();
@@ -197,23 +180,6 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
 
         config.setExecutorConfigs(executorConfigs);
         return config;
-    }
-
-    /**
-     * AsyncServiceConfigModel转换为AsyncTaskExecutorConfig
-     * 
-     * @param config
-     *            AsyncServiceConfigModel
-     * @return AsyncTaskExecutorConfig
-     */
-    private AsyncTaskExecutorConfig convert(AsyncServiceConfigModel.Config config) {
-        AsyncTaskExecutorConfig executorConfig = new AsyncTaskExecutorConfig();
-        executorConfig.setCacheQueueSize(config.getCacheQueueSize());
-        executorConfig.setLoadThreshold(config.getLoadThreshold());
-        executorConfig.setLoadInterval(config.getLoadInterval());
-        executorConfig.setMonitorInterval(config.getMonitorInterval());
-        executorConfig.setThreadPoolConfig(config.getThreadPoolConfig());
-        return executorConfig;
     }
 
     @Bean
@@ -263,6 +229,31 @@ public class AsyncServiceAutoConfiguration implements ApplicationContextAware {
     public AsyncTransactionManager asyncTransactionManager(@Autowired ConnectionManager connectionManager,
         @Autowired(required = false) TransactionHook transactionHook) {
         return new AsyncTransactionManagerImpl(connectionManager, transactionHook);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public TaskCacheQueueFactory taskCacheQueueFactory() {
+        return new DefaultTaskCacheQueueFactory();
+    }
+
+    /**
+     * AsyncServiceConfigModel转换为AsyncTaskExecutorConfig
+     *
+     * @param config
+     *            AsyncServiceConfigModel
+     * @return AsyncTaskExecutorConfig
+     */
+    private AsyncTaskExecutorConfig convert(AsyncServiceConfigModel.Config config) {
+        AsyncTaskExecutorConfig executorConfig = new AsyncTaskExecutorConfig();
+        executorConfig.setCacheQueueSize(config.getCacheQueueSize());
+        executorConfig.setLoadThreshold(config.getLoadThreshold());
+        executorConfig.setLoadInterval(config.getLoadInterval());
+        executorConfig.setMonitorInterval(config.getMonitorInterval());
+        executorConfig.setExecTimeout(config.getExecTimeout());
+        executorConfig.setLoadTaskFromRepository(config.isLoadTaskFromRepository());
+        executorConfig.setThreadPoolConfig(config.getThreadPoolConfig());
+        return executorConfig;
     }
 
 }

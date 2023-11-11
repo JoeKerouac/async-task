@@ -62,11 +62,6 @@ public class MonitorServiceAdaptor implements MonitorService {
     }
 
     @Override
-    public void monitor(final int queueSize) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.info("当前队列中任务: [{}]", queueSize);
-    }
-
-    @Override
     public void uncaughtException(final Thread thread, final Throwable e) {
         DEFAULT_ASYNC_MONITOR_LOGGER.error(e, "异步任务线程未处理异常, [{}]", thread);
     }

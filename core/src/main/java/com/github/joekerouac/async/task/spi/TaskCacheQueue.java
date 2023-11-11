@@ -12,23 +12,52 @@
  */
 package com.github.joekerouac.async.task.spi;
 
+import java.util.Set;
+
+import com.github.joekerouac.async.task.entity.AsyncTask;
+
 /**
- * 异步任务执行引擎
- *
+ * 任务缓存队列
+ * 
  * @author JoeKerouac
- * @date 2023-04-18 14:55
- * @since 2.0.3
+ * @date 2023-11-09 17:11
+ * @since 4.0.0
  */
-public interface AsyncTaskProcessorEngine {
+public interface TaskCacheQueue {
 
     /**
-     * 启动
+     * 启动cache
      */
     void start();
 
     /**
-     * 关闭
+     * 停止cache
      */
     void stop();
+
+    /**
+     * 将任务尝试加到缓存
+     *
+     * fixme 修改为批量添加
+     *
+     * @param task
+     *            要添加的任务
+     */
+    void addTask(AsyncTask task);
+
+    /**
+     * 将任务从缓存移除
+     *
+     * @param taskRequestIds
+     *            任务requestId列表
+     */
+    void removeTask(Set<String> taskRequestIds);
+
+    /**
+     * 从队列中获取一个可执行任务（到达执行时间），并将任务从队列移除，如果当前没有可执行的任务，则阻塞到有可执行任务为止
+     * 
+     * @return 任务，不能为空
+     */
+    AsyncTask take() throws InterruptedException;
 
 }

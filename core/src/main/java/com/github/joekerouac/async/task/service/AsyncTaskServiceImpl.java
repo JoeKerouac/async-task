@@ -28,18 +28,19 @@ import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.entity.common.ExtMap;
 import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.MonitorServiceProxy;
+import com.github.joekerouac.async.task.impl.TaskGroup;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
-import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
 import com.github.joekerouac.async.task.model.CancelStatus;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
+import com.github.joekerouac.async.task.model.TaskGroupConfig;
+import com.github.joekerouac.async.task.model.TaskQueueConfig;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine;
-import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
+import com.github.joekerouac.async.task.spi.ProcessorRegistry;
 import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
@@ -64,21 +65,25 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     /**
      * 异步任务执行引擎
      */
-    private final AsyncTaskProcessorEngine defaultEngine;
+    private final TaskGroup defaultGroup;
 
     /**
      * key是processor name
      */
-    private final Map<String, AsyncTaskProcessorEngine> engineMap;
+    private final Map<String, TaskGroup> taskGroupMap;
 
     /**
      * 当前任务是否启动
      */
     private volatile boolean start = false;
 
+    private final ProcessorRegistry processorRegistry;
+
     public AsyncTaskServiceImpl(@NotNull AsyncServiceConfig config) {
         Assert.notNull(config, "config不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
         Const.VALIDATION_SERVICE.validate(config);
+
+        processorRegistry = config.getProcessorRegistry();
 
         MonitorService monitorService = config.getMonitorService();
         monitorService = monitorService == null ? new MonitorServiceAdaptor() : monitorService;
@@ -90,31 +95,26 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             config.setEngineFactory(new DefaultAsyncTaskProcessorEngineFactory());
         }
 
-        TaskClearRunner taskClearRunner = new TaskClearRunner(config.getRepository());
-
-        this.engineMap = new HashMap<>();
+        this.taskGroupMap = new HashMap<>();
         this.config = config;
 
         Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = config.getExecutorConfigs();
         Set<String> set = new HashSet<>();
         if (!CollectionUtil.isEmpty(executorConfigs)) {
             executorConfigs.forEach((processorNames, executorConfig) -> {
-                AsyncTaskProcessorEngine engine = build(config, taskClearRunner, processorNames, true);
+                TaskGroup taskGroup = build(config, executorConfig, processorNames, true);
                 for (String processorName : processorNames) {
                     Assert.assertTrue(set.add(processorName),
                         StringUtils.format("处理器有多个配置, processor: [{}]", processorName),
                         ExceptionProviderConst.IllegalArgumentExceptionProvider);
-                    engineMap.put(processorName, engine);
+                    taskGroupMap.put(processorName, taskGroup);
                 }
             });
         }
 
-        this.defaultEngine = build(config, taskClearRunner, set, false);
+        this.defaultGroup = build(config, config.getDefaultExecutorConfig(), set, false);
 
-        if (CollectionUtil.isNotEmpty(config.getProcessors())) {
-            config.getProcessors().forEach(this::addProcessor);
-        }
-
+        TaskClearRunner taskClearRunner = new TaskClearRunner(config.getRepository(), config.getProcessorRegistry());
         Thread taskClearThread = new Thread(taskClearRunner, "异步任务自动清理线程");
         taskClearThread.setPriority(Thread.MIN_PRIORITY);
         taskClearThread.setDaemon(true);
@@ -122,40 +122,49 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     }
 
     /**
-     * 构建异步任务执行引擎
+     * 构建任务组
      * 
      * @param asyncServiceConfig
-     *            异步任务配置
-     * @param taskClearRunner
-     *            任务清理器
-     * @param processorGroup
+     *            异步任务全局配置
+     * @param executorConfig
+     *            执行器配置
+     * @param taskTypeGroup
      *            任务列表
      * @param contain
      *            true表示异步任务引擎只处理processorGroup中包含的任务，false表示异步任务处理引擎不应该处理processorGroup中包含的任务，而应该处理所有其他任务
-     * @return 异步任务执行引擎
+     * @return 任务组
      */
-    private AsyncTaskProcessorEngine build(AsyncServiceConfig asyncServiceConfig, TaskClearRunner taskClearRunner,
-        Set<String> processorGroup, boolean contain) {
-        AsyncTaskProcessorEngineConfig engineConfig = new AsyncTaskProcessorEngineConfig();
-        engineConfig.setExecutorConfig(asyncServiceConfig.getDefaultExecutorConfig());
-        engineConfig.setRepository(asyncServiceConfig.getRepository());
-        engineConfig.setProcessorSupplier(asyncServiceConfig.getProcessorSupplier());
-        engineConfig.setTraceService(asyncServiceConfig.getTraceService());
-        engineConfig.setMonitorService(asyncServiceConfig.getMonitorService());
-        engineConfig.setLoadTaskFromRepository(asyncServiceConfig.isLoadTaskFromRepository());
-        engineConfig.setTaskClearRunner(taskClearRunner);
-        engineConfig.setProcessorGroup(processorGroup);
-        engineConfig.setContain(contain);
-
-        int cacheQueueSize = engineConfig.getExecutorConfig().getCacheQueueSize();
-        int loadThreshold = engineConfig.getExecutorConfig().getLoadThreshold();
+    private TaskGroup build(AsyncServiceConfig asyncServiceConfig, AsyncTaskExecutorConfig executorConfig,
+        Set<String> taskTypeGroup, boolean contain) {
+        int cacheQueueSize = executorConfig.getCacheQueueSize();
+        int loadThreshold = executorConfig.getLoadThreshold();
         Assert.assertTrue(
             loadThreshold < cacheQueueSize || (loadThreshold == 0 && cacheQueueSize == 0), StringUtils
                 .format("触发捞取任务的队列长度阈值应该小于缓存队列的长度，当前触发捞取任务的队列长度为：[{}],当前缓存队列长度为：[{}]", loadThreshold, cacheQueueSize),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
 
-        // 这里构建出仓储服务
-        return asyncServiceConfig.getEngineFactory().create(engineConfig);
+        TaskQueueConfig taskQueueConfig = new TaskQueueConfig();
+        taskQueueConfig.setLoadInterval(executorConfig.getLoadInterval());
+        taskQueueConfig.setCacheQueueSize(executorConfig.getCacheQueueSize());
+        taskQueueConfig.setLoadThreshold(executorConfig.getLoadThreshold());
+        taskQueueConfig.setLoadTaskFromRepository(executorConfig.isLoadTaskFromRepository());
+        taskQueueConfig.setTaskTypeGroup(taskTypeGroup);
+        taskQueueConfig.setContain(contain);
+
+        TaskGroupConfig taskGroupConfig = new TaskGroupConfig();
+        taskGroupConfig.setTaskCacheQueueFactory(asyncServiceConfig.getTaskCacheQueueFactory());
+        taskGroupConfig.setEngineFactory(asyncServiceConfig.getEngineFactory());
+        taskGroupConfig.setTaskQueueConfig(taskQueueConfig);
+        taskGroupConfig.setThreadPoolConfig(executorConfig.getThreadPoolConfig());
+        taskGroupConfig.setProcessorRegistry(asyncServiceConfig.getProcessorRegistry());
+        taskGroupConfig.setTraceService(asyncServiceConfig.getTraceService());
+        taskGroupConfig.setMonitorService(asyncServiceConfig.getMonitorService());
+        taskGroupConfig.setExecTimeout(executorConfig.getExecTimeout());
+        taskGroupConfig.setMonitorInterval(executorConfig.getMonitorInterval());
+        taskGroupConfig.setRepository(asyncServiceConfig.getRepository());
+        taskGroupConfig.setTransactionManager(asyncServiceConfig.getTransactionManager());
+
+        return new TaskGroup(taskGroupConfig);
     }
 
     @Override
@@ -164,9 +173,9 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             if (start) {
                 LOGGER.warn("当前异步任务服务已经启动，请勿重复调用启动方法");
             } else {
-                defaultEngine.start();
-                if (!engineMap.isEmpty()) {
-                    engineMap.values().forEach(AsyncTaskProcessorEngine::start);
+                defaultGroup.start();
+                if (!taskGroupMap.isEmpty()) {
+                    taskGroupMap.values().forEach(TaskGroup::start);
                 }
                 start = true;
             }
@@ -177,9 +186,9 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     public void stop() {
         synchronized (config) {
             if (start) {
-                defaultEngine.stop();
-                if (!engineMap.isEmpty()) {
-                    engineMap.values().forEach(AsyncTaskProcessorEngine::stop);
+                defaultGroup.stop();
+                if (!taskGroupMap.isEmpty()) {
+                    taskGroupMap.values().forEach(TaskGroup::stop);
                 }
                 start = false;
             } else {
@@ -190,19 +199,19 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
     @Override
     public void addProcessor(final AbstractAsyncTaskProcessor<?> processor) {
-        for (String name : processor.processors()) {
-            getEngine(name).addProcessor(processor);
+        for (String taskType : processor.processors()) {
+            processorRegistry.registerProcessor(taskType, processor);
         }
     }
 
     @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(final String processorName) {
-        return getEngine(processorName).removeProcessor(processorName);
+        return processorRegistry.removeProcessor(processorName);
     }
 
     @Override
     public <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(final String processorName) {
-        return getEngine(processorName).getProcessor(processorName);
+        return processorRegistry.getProcessor(processorName);
     }
 
     @Override
@@ -222,16 +231,8 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         AsyncTask task = config.getRepository().selectByRequestId(requestId);
 
         if (task != null && task.getStatus() == ExecStatus.WAIT) {
-            config.getTransactionManager().runWithTrans(transStrategy, () -> {
-                if (config.getRepository().casUpdate(requestId, ExecStatus.WAIT, ExecStatus.READY, Const.IP) > 0) {
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("唤醒任务: [{}]", task.getRequestId());
-                    }
-                    task.setStatus(ExecStatus.READY);
-                    // 立即添加到内存中，防止调度延迟
-                    addTaskToEngineAfterTransCommit(task);
-                }
-            });
+            config.getTransactionManager().runWithTrans(transStrategy,
+                () -> getTaskGroup(task.getProcessor()).notifyTask(requestId));
         }
     }
 
@@ -266,7 +267,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         final LocalDateTime execTime, final String taskProcessor, TransStrategy transStrategy, ExecStatus status) {
         Assert.assertTrue(start, "当前服务还未启动，请先启动后调用", ExceptionProviderConst.IllegalStateExceptionProvider);
 
-        AbstractAsyncTaskProcessor<?> processor = getEngine(taskProcessor).getProcessor(taskProcessor);
+        AbstractAsyncTaskProcessor<?> processor = processorRegistry.getProcessor(taskProcessor);
         Assert.notNull(processor, StringUtils.format("指定的任务处理器 [{}] 不存在", taskProcessor),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
         IDGenerator idGenerator = config.getIdGenerator();
@@ -277,7 +278,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         // 将任务序列化
         String context = processor.serialize(task);
 
-        AsyncTaskRepository repository = config.getRepository();
+        TaskGroup taskGroup = getTaskGroup(taskProcessor);
         AsyncTask asyncTask = new AsyncTask();
         asyncTask.setId(id);
         asyncTask.setRequestId(requestId);
@@ -305,33 +306,16 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         }
 
         config.getTransactionManager().runWithTrans(transStrategy, () -> {
-            if (repository.save(asyncTask)) {
-                addTaskToEngineAfterTransCommit(asyncTask);
-            } else {
+            if (!taskGroup.addTask(asyncTask)) {
                 // 主键冲突保存失败
                 config.getMonitorService().duplicateTask(requestId, task);
             }
         });
     }
 
-    /**
-     * 将任务在事务提交后放入处理引擎中处理
-     * 
-     * @param asyncTask
-     *            待添加的任务
-     */
-    private void addTaskToEngineAfterTransCommit(AsyncTask asyncTask) {
-        Runnable callback = () -> {
-            getEngine(asyncTask.getProcessor()).addTask(Collections.singletonList(asyncTask));
-            LOGGER.info("将任务[{}]添加到内存队列中", asyncTask);
-        };
-
-        config.getTransactionManager().runAfterCommit(callback);
-    }
-
     private void removeTaskFromEngineAfterTransCommit(AsyncTask asyncTask) {
         Runnable callback = () -> {
-            getEngine(asyncTask.getProcessor()).removeTask(Collections.singletonList(asyncTask.getRequestId()));
+            getTaskGroup(asyncTask.getProcessor()).removeTask(Collections.singleton(asyncTask.getRequestId()));
             LOGGER.info("将任务[{}]从内存队列中移除", asyncTask);
         };
 
@@ -340,8 +324,8 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
     }
 
-    private AsyncTaskProcessorEngine getEngine(String processor) {
-        return Optional.ofNullable(engineMap.get(processor)).orElse(defaultEngine);
+    private TaskGroup getTaskGroup(String processor) {
+        return Optional.ofNullable(taskGroupMap.get(processor)).orElse(defaultGroup);
     }
 
 }
