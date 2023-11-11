@@ -23,7 +23,6 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
@@ -49,7 +48,6 @@ import com.github.joekerouac.async.task.spi.ConnectionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.ProcessorRegistry;
-import com.github.joekerouac.async.task.spi.ProcessorSupplier;
 import com.github.joekerouac.async.task.spi.TaskCacheQueueFactory;
 import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.async.task.spi.TransactionHook;
@@ -154,9 +152,7 @@ public class AsyncServiceAutoConfiguration
         @Autowired IDGenerator asyncIdGenerator, @Autowired AsyncTransactionManager asyncTransactionManager,
         @Autowired TaskCacheQueueFactory taskCacheQueueFactory, @Autowired ProcessorRegistry processorRegistry,
         @Autowired(required = false) MonitorService monitorService,
-        @Autowired(required = false) TraceService traceService,
-        @Autowired(required = false) ProcessorSupplier processorSupplier,
-        @Value("${async.service.loadTaskFromRepository:true}") boolean loadTaskFromRepository) {
+        @Autowired(required = false) TraceService traceService) {
         LOGGER.debug("当前异步任务服务配置详情为： [{}:{}:{}:{}:{}]", asyncServiceConfigModel, asyncTaskRepository, asyncIdGenerator,
             asyncTransactionManager, monitorService);
 

@@ -19,7 +19,16 @@ import java.util.Set;
  * @date 2023-11-09 17:04
  * @since 4.0.0
  */
-public interface ProcessorRegistry extends ProcessorSupplier {
+public interface ProcessorRegistry {
+
+    /**
+     * 获取processor
+     *
+     * @param taskType
+     *            task type
+     * @return 指定task type对应的processor，不存在时返回null
+     */
+    <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String taskType);
 
     /**
      * 注册processor

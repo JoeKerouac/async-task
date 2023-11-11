@@ -12,9 +12,7 @@
  */
 package com.github.joekerouac.async.task.flow.model;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import javax.validation.constraints.Max;
@@ -32,10 +30,10 @@ import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
 import com.github.joekerouac.async.task.flow.spi.FlowTaskRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
-import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
-import com.github.joekerouac.async.task.spi.ProcessorSupplier;
+import com.github.joekerouac.async.task.spi.ProcessorRegistry;
+import com.github.joekerouac.common.tools.scheduler.SchedulerSystem;
 
 import lombok.CustomLog;
 import lombok.Data;
@@ -71,6 +69,12 @@ public class FlowServiceConfig {
     private IDGenerator idGenerator;
 
     /**
+     * 任务处理器注册表
+     */
+    @NotNull
+    private ProcessorRegistry processorRegistry;
+
+    /**
      * 异步任务服务
      */
     @NotNull
@@ -104,16 +108,10 @@ public class FlowServiceConfig {
     private AsyncTransactionManager transactionManager;
 
     /**
-     * 任务处理器提供者，优先使用静态任务处理器，静态任务处理器不存在时尝试使用从该处理器提供者获取
-     */
-    private ProcessorSupplier processorSupplier;
-
-    /**
-     * 所有任务处理器
+     * 调度系统
      */
     @NotNull
-    @SuppressWarnings("rawtypes")
-    private List<AbstractAsyncTaskProcessor> processors = new ArrayList<>();
+    private SchedulerSystem schedulerSystem;
 
     /**
      * 所有执行策略

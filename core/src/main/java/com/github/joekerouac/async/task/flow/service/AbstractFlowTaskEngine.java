@@ -32,7 +32,7 @@ import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
-import com.github.joekerouac.async.task.spi.ProcessorSupplier;
+import com.github.joekerouac.async.task.spi.ProcessorRegistry;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
@@ -78,14 +78,9 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     private static final String TASK_CACHE_CACHE_KEY = "taskCache";
 
     /**
-     * 所有任务处理器
-     */
-    protected final Map<String, AbstractAsyncTaskProcessor<?>> processors;
-
-    /**
      * 任务处理器提供
      */
-    protected final ProcessorSupplier processorSupplier;
+    protected final ProcessorRegistry processorRegistry;
 
     /**
      * 异步任务服务
@@ -123,7 +118,6 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     protected final AsyncTransactionManager transactionManager;
 
     public AbstractFlowTaskEngine(EngineConfig config) {
-        this.processors = config.processors;
         this.asyncTaskService = config.asyncTaskService;
         this.flowMonitorService = config.flowMonitorService;
         this.flowTaskRepository = config.flowTaskRepository;
@@ -131,7 +125,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         this.taskNodeMapRepository = config.taskNodeMapRepository;
         this.executeStrategies = config.executeStrategies;
         this.transactionManager = config.transactionManager;
-        this.processorSupplier = config.processorSupplier;
+        this.processorRegistry = config.processorRegistry;
     }
 
     /**
@@ -273,14 +267,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
             // 注意，flag要放在最前边，防止其他语句执行异常导致放入失败导致后续判断错误
             cache.put(TASK_EXECUTE_FLAG_CACHE_KEY, Boolean.TRUE);
 
-            @SuppressWarnings("unchecked")
-            AbstractAsyncTaskProcessor<Object> processor =
-                (AbstractAsyncTaskProcessor<Object>)processors.get(taskNode.getProcessor());
-
-            // TODO 待优化
-            if (processor == null && processorSupplier != null) {
-                processor = processorSupplier.getProcessor(taskNode.getProcessor());
-            }
+            AbstractAsyncTaskProcessor<Object> processor = processorRegistry.getProcessor(taskNode.getProcessor());
 
             // 注意，找不到处理器时抛出异常，等待重试，因为可能时发布过程中的不兼容问题导致的，可能给个机会调度到最新代码的机器上就可以执行了
             Assert.notNull(processor,
@@ -463,8 +450,6 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
     @Accessors(chain = true, fluent = true)
     public static class EngineConfig {
 
-        private Map<String, AbstractAsyncTaskProcessor<?>> processors;
-
         private AsyncTaskService asyncTaskService;
 
         private FlowMonitorService flowMonitorService;
@@ -479,7 +464,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
 
         private AsyncTransactionManager transactionManager;
 
-        private ProcessorSupplier processorSupplier;
+        private ProcessorRegistry processorRegistry;
     }
 
 }

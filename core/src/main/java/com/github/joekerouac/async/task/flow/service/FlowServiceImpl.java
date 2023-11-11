@@ -19,14 +19,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
-import com.github.joekerouac.async.task.exception.ProcessorAlreadyExistException;
 import com.github.joekerouac.async.task.flow.FlowService;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskType;
@@ -51,7 +48,7 @@ import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
-import com.github.joekerouac.async.task.spi.ProcessorSupplier;
+import com.github.joekerouac.async.task.spi.ProcessorRegistry;
 import com.github.joekerouac.async.task.spi.TransactionCallback;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.collection.Pair;
@@ -59,14 +56,10 @@ import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.db.SqlUtil;
 import com.github.joekerouac.common.tools.exception.ExceptionUtil;
 import com.github.joekerouac.common.tools.scheduler.SchedulerSystem;
-import com.github.joekerouac.common.tools.scheduler.SchedulerSystemImpl;
 import com.github.joekerouac.common.tools.scheduler.SchedulerTask;
 import com.github.joekerouac.common.tools.scheduler.SimpleSchedulerTask;
 import com.github.joekerouac.common.tools.scheduler.TaskDescriptor;
 import com.github.joekerouac.common.tools.string.StringUtils;
-import com.github.joekerouac.common.tools.thread.NamedThreadFactory;
-import com.github.joekerouac.common.tools.thread.ThreadPoolConfig;
-import com.github.joekerouac.common.tools.thread.ThreadUtil;
 import com.github.joekerouac.common.tools.util.Assert;
 import com.github.joekerouac.common.tools.util.Starter;
 
@@ -118,16 +111,6 @@ public class FlowServiceImpl implements FlowService {
     private final TaskNodeMapRepository taskNodeMapRepository;
 
     /**
-     * 任务处理器提供
-     */
-    private final ProcessorSupplier processorSupplier;
-
-    /**
-     * 所有任务处理器
-     */
-    private final Map<String, AbstractAsyncTaskProcessor<?>> processors;
-
-    /**
      * 所有执行策略
      */
     private final Map<String, ExecuteStrategy> executeStrategies;
@@ -152,11 +135,14 @@ public class FlowServiceImpl implements FlowService {
      */
     private final Starter starter;
 
-    public FlowServiceImpl(FlowServiceConfig config) {
-        Const.VALIDATION_SERVICE.validate(config);
+    private final ProcessorRegistry processorRegistry;
 
+    public FlowServiceImpl(FlowServiceConfig config, StreamTaskEngine streamTaskEngine, SetTaskEngine setTaskEngine) {
+        Const.VALIDATION_SERVICE.validate(config);
+        schedulerSystem = config.getSchedulerSystem();
         transactionManager = config.getTransactionManager();
         streamNodeMapBatchSize = config.getStreamNodeMapBatchSize();
+        processorRegistry = config.getProcessorRegistry();
         idGenerator = config.getIdGenerator();
         asyncTaskService = config.getAsyncTaskService();
         flowTaskRepository = config.getFlowTaskRepository() == null ? new FlowTaskRepositoryImpl(transactionManager)
@@ -165,34 +151,15 @@ public class FlowServiceImpl implements FlowService {
             : config.getTaskNodeRepository();
         taskNodeMapRepository = config.getTaskNodeMapRepository() == null
             ? new TaskNodeMapRepositoryImpl(transactionManager) : config.getTaskNodeMapRepository();
-        processors = new ConcurrentHashMap<>();
-        processorSupplier = config.getProcessorSupplier();
-        for (final AbstractAsyncTaskProcessor<?> processor : config.getProcessors()) {
-            addProcessor(processor);
-        }
 
         executeStrategies = config.getExecuteStrategies();
 
         starter = new Starter();
-        ThreadPoolConfig threadPoolConfig = new ThreadPoolConfig();
-        threadPoolConfig.setCorePoolSize(config.getFlowTaskBatchSize());
-        threadPoolConfig.setMaximumPoolSize(config.getFlowTaskBatchSize());
-        threadPoolConfig.setWorkQueue(new LinkedBlockingQueue<>());
-        threadPoolConfig.setThreadFactory(new NamedThreadFactory("无限流任务图构建线程"));
-        threadPoolConfig.setRejectedExecutionHandler((r, executor) -> LOGGER.warn("无限流任务图构建任务 [{}] 被丢弃", r));
-        schedulerSystem = new SchedulerSystemImpl("流式任务调度系统", ThreadUtil.newThreadPool(threadPoolConfig), true);
 
-        AbstractFlowTaskEngine.EngineConfig engineConfig =
-            AbstractFlowTaskEngine.EngineConfig.builder().processors(processors).asyncTaskService(asyncTaskService)
-                .flowMonitorService(config.getFlowMonitorService()).flowTaskRepository(flowTaskRepository)
-                .taskNodeRepository(taskNodeRepository).taskNodeMapRepository(taskNodeMapRepository)
-                .executeStrategies(executeStrategies).transactionManager(transactionManager)
-                .processorSupplier(processorSupplier).build();
-
-        streamTaskEngine = new StreamTaskEngine(engineConfig, schedulerSystem);
+        this.streamTaskEngine = streamTaskEngine;
 
         // 添加有限集处理引擎
-        asyncTaskService.addProcessor(new SetTaskEngine(engineConfig));
+        asyncTaskService.addProcessor(setTaskEngine);
         // 添加无限流处理引擎
         asyncTaskService.addProcessor(streamTaskEngine);
 
@@ -252,35 +219,6 @@ public class FlowServiceImpl implements FlowService {
             flowTaskLoader.stop();
             schedulerSystem.stop();
         });
-    }
-
-    @Override
-    public void addProcessor(final AbstractAsyncTaskProcessor<?> processor) {
-        Assert.notNull(processor, "要添加的processor不能为空", ExceptionProviderConst.IllegalArgumentExceptionProvider);
-        Assert.assertTrue(processor.processors() != null && processor.processors().length > 0,
-            StringUtils.format("处理器 [{}] 的处理器名(processors)返回了空", processor),
-            ExceptionProviderConst.CodeErrorExceptionProvider);
-
-        for (final String name : processor.processors()) {
-            Assert.assertTrue(StringUtils.isNotBlank(name),
-                StringUtils.format("处理器 [{}] 的处理器名(processors)中存在空的", processor),
-                ExceptionProviderConst.CodeErrorExceptionProvider);
-
-            AbstractAsyncTaskProcessor<?> old = processors.put(name, processor);
-            if (old != null) {
-                throw new ProcessorAlreadyExistException(
-                    StringUtils.format("当前有两个叫 [{}] 的处理器，分别是：[{}, {}]", name, processor, old), old);
-            } else if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("注册处理器：[{}:{}]", name, processor);
-            }
-        }
-    }
-
-    @Override
-    public AbstractAsyncTaskProcessor<?> removeProcessor(final String processorName) {
-        Assert.notBlank(processorName, "要移除的processorName不能为空",
-            ExceptionProviderConst.IllegalArgumentExceptionProvider);
-        return processors.remove(processorName);
     }
 
     @Override
@@ -708,13 +646,7 @@ public class FlowServiceImpl implements FlowService {
     private TaskNode build(TaskNodeModel model, IDGenerator idGenerator, String flowTaskRequestId) {
         String processorName =
             StringUtils.getOrDefault(model.getProcessor(), model.getData().getClass().getSimpleName());
-        AbstractAsyncTaskProcessor<?> processor = processors.get(processorName);
-        if (processor == null && processorSupplier != null) {
-            processor = processorSupplier.getProcessor(processorName);
-            if (processor != null) {
-                addProcessor(processor);
-            }
-        }
+        AbstractAsyncTaskProcessor<?> processor = processorRegistry.getProcessor(processorName);
         Assert.notNull(processor,
             StringUtils.format("任务 [{}:{}] 对应的处理器 [{}] 不存在", flowTaskRequestId, model.getRequestId(), processorName),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);

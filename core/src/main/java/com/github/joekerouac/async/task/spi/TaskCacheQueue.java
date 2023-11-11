@@ -38,8 +38,6 @@ public interface TaskCacheQueue {
     /**
      * 将任务尝试加到缓存
      *
-     * fixme 修改为批量添加
-     *
      * @param task
      *            要添加的任务
      */

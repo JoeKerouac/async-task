@@ -31,15 +31,23 @@ import org.testng.annotations.Test;
 import com.github.joekerouac.async.task.flow.FlowService;
 import com.github.joekerouac.async.task.flow.enums.FailStrategy;
 import com.github.joekerouac.async.task.flow.impl.StrategyConst;
+import com.github.joekerouac.async.task.flow.impl.repository.FlowTaskRepositoryImpl;
+import com.github.joekerouac.async.task.flow.impl.repository.TaskNodeMapRepositoryImpl;
+import com.github.joekerouac.async.task.flow.impl.repository.TaskNodeRepositoryImpl;
 import com.github.joekerouac.async.task.flow.model.FlowServiceConfig;
 import com.github.joekerouac.async.task.flow.model.SetTaskModel;
 import com.github.joekerouac.async.task.flow.model.StreamTaskModel;
 import com.github.joekerouac.async.task.flow.model.TaskNodeModel;
+import com.github.joekerouac.async.task.flow.service.AbstractFlowTaskEngine;
 import com.github.joekerouac.async.task.flow.service.FlowServiceImpl;
+import com.github.joekerouac.async.task.flow.service.SetTaskEngine;
+import com.github.joekerouac.async.task.flow.service.StreamTaskEngine;
 import com.github.joekerouac.async.task.flow.spi.FlowMonitorService;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.test.TestEngine;
+import com.github.joekerouac.common.tools.scheduler.SchedulerSystemImpl;
+import com.github.joekerouac.common.tools.thread.ThreadPoolConfig;
 import com.github.joekerouac.common.tools.thread.ThreadUtil;
 
 import lombok.AllArgsConstructor;
@@ -61,12 +69,34 @@ public class FlowTaskTest extends TestEngine {
     @Override
     public void init() throws Exception {
         super.init();
-        FlowServiceConfig config = new FlowServiceConfig();
-        config.setIdGenerator(asyncServiceConfig.getIdGenerator());
-        config.setTransactionManager(transactionManager);
-        config.setAsyncTaskService(asyncTaskService);
-        config.setFlowMonitorService(new FlowMonitorService() {});
-        flowService = new FlowServiceImpl(config);
+        SchedulerSystemImpl schedulerSystem =
+            new SchedulerSystemImpl("流式任务调度系统", ThreadUtil.newThreadPool(new ThreadPoolConfig()), true);
+
+        FlowServiceConfig flowServiceConfig = new FlowServiceConfig();
+        flowServiceConfig.setIdGenerator(asyncServiceConfig.getIdGenerator());
+        flowServiceConfig.setProcessorRegistry(processorRegistry);
+        flowServiceConfig.setAsyncTaskService(asyncTaskService);
+        flowServiceConfig.setFlowMonitorService(new FlowMonitorService() {});
+        flowServiceConfig.setFlowTaskRepository(new FlowTaskRepositoryImpl(transactionManager));
+        flowServiceConfig.setTaskNodeRepository(new TaskNodeRepositoryImpl(transactionManager));
+        flowServiceConfig.setTaskNodeMapRepository(new TaskNodeMapRepositoryImpl(transactionManager));
+        flowServiceConfig.setTransactionManager(transactionManager);
+        flowServiceConfig.setSchedulerSystem(schedulerSystem);
+
+        AbstractFlowTaskEngine.EngineConfig engineConfig =
+            AbstractFlowTaskEngine.EngineConfig.builder().processorRegistry(flowServiceConfig.getProcessorRegistry())
+                .asyncTaskService(flowServiceConfig.getAsyncTaskService())
+                .flowMonitorService(flowServiceConfig.getFlowMonitorService())
+                .flowTaskRepository(flowServiceConfig.getFlowTaskRepository())
+                .taskNodeRepository(flowServiceConfig.getTaskNodeRepository())
+                .taskNodeMapRepository(flowServiceConfig.getTaskNodeMapRepository())
+                .executeStrategies(flowServiceConfig.getExecuteStrategies())
+                .transactionManager(flowServiceConfig.getTransactionManager()).build();
+
+        StreamTaskEngine streamTaskEngine = new StreamTaskEngine(engineConfig, flowServiceConfig.getSchedulerSystem());
+        SetTaskEngine setTaskEngine = new SetTaskEngine(engineConfig);
+
+        flowService = new FlowServiceImpl(flowServiceConfig, streamTaskEngine, setTaskEngine);
         flowService.start();
     }
 
@@ -93,7 +123,7 @@ public class FlowTaskTest extends TestEngine {
                 return new String[] {processorName};
             }
         };
-        flowService.addProcessor(processor);
+        asyncTaskService.addProcessor(processor);
 
         try {
             SetTaskModel model = new SetTaskModel();
@@ -114,7 +144,7 @@ public class FlowTaskTest extends TestEngine {
             }
         } finally {
             for (final String name : processor.processors()) {
-                Assert.assertNotNull(flowService.removeProcessor(name));
+                Assert.assertNotNull(asyncTaskService.removeProcessor(name));
             }
         }
     }
@@ -141,7 +171,7 @@ public class FlowTaskTest extends TestEngine {
                 }
             };
 
-            flowService.addProcessor(processor);
+            asyncTaskService.addProcessor(processor);
 
             try {
                 StreamTaskModel model = new StreamTaskModel();
@@ -161,7 +191,7 @@ public class FlowTaskTest extends TestEngine {
                 }
             } finally {
                 for (final String name : processor.processors()) {
-                    Assert.assertNotNull(flowService.removeProcessor(name));
+                    Assert.assertNotNull(asyncTaskService.removeProcessor(name));
                 }
             }
         }
@@ -175,7 +205,7 @@ public class FlowTaskTest extends TestEngine {
                     return new String[] {processorName};
                 }
             };
-            flowService.addProcessor(processor);
+            asyncTaskService.addProcessor(processor);
 
             try {
                 StreamTaskModel model = new StreamTaskModel();
@@ -196,7 +226,7 @@ public class FlowTaskTest extends TestEngine {
                 }
             } finally {
                 for (final String name : processor.processors()) {
-                    Assert.assertNotNull(flowService.removeProcessor(name));
+                    Assert.assertNotNull(asyncTaskService.removeProcessor(name));
                 }
             }
         }
@@ -219,7 +249,7 @@ public class FlowTaskTest extends TestEngine {
                 return new String[] {processorName};
             }
         };
-        flowService.addProcessor(processor);
+        asyncTaskService.addProcessor(processor);
 
         try {
             SetTaskModel model = new SetTaskModel();
@@ -250,7 +280,7 @@ public class FlowTaskTest extends TestEngine {
             Assert.assertEquals(processor.contexts.get(3).id, 4);
         } finally {
             for (final String name : processor.processors()) {
-                Assert.assertNotNull(flowService.removeProcessor(name));
+                Assert.assertNotNull(asyncTaskService.removeProcessor(name));
             }
         }
     }
