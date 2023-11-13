@@ -137,7 +137,7 @@ public class FlowServiceImpl implements FlowService {
 
     private final ProcessorRegistry processorRegistry;
 
-    public FlowServiceImpl(FlowServiceConfig config, StreamTaskEngine streamTaskEngine, SetTaskEngine setTaskEngine) {
+    public FlowServiceImpl(FlowServiceConfig config, StreamTaskEngine streamTaskEngine) {
         Const.VALIDATION_SERVICE.validate(config);
         schedulerSystem = config.getSchedulerSystem();
         transactionManager = config.getTransactionManager();
@@ -157,11 +157,6 @@ public class FlowServiceImpl implements FlowService {
         starter = new Starter();
 
         this.streamTaskEngine = streamTaskEngine;
-
-        // 添加有限集处理引擎
-        asyncTaskService.addProcessor(setTaskEngine);
-        // 添加无限流处理引擎
-        asyncTaskService.addProcessor(streamTaskEngine);
 
         // 流式任务线程批处理
         flowTaskLoader = new SimpleSchedulerTask(() -> {

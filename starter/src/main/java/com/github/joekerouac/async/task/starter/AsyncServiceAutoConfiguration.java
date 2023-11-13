@@ -12,12 +12,9 @@
  */
 package com.github.joekerouac.async.task.starter;
 
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import javax.sql.DataSource;
 
@@ -31,6 +28,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.annotation.Order;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.db.AsyncTransactionManagerImpl;
@@ -40,7 +38,6 @@ import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
 import com.github.joekerouac.async.task.service.DefaultAsyncTaskProcessorEngineFactory;
-import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngineFactory;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
@@ -52,6 +49,7 @@ import com.github.joekerouac.async.task.spi.TaskCacheQueueFactory;
 import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.async.task.spi.TransactionHook;
 import com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel;
+import com.github.joekerouac.async.task.starter.impl.SpringProcessorRegistry;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.string.StringUtils;
 
@@ -64,6 +62,7 @@ import lombok.CustomLog;
  */
 @CustomLog
 @EnableConfigurationProperties({AsyncServiceConfigModel.class})
+@Order(200)
 public class AsyncServiceAutoConfiguration
     implements ApplicationContextAware, ApplicationListener<ApplicationStartedEvent> {
 
@@ -71,6 +70,7 @@ public class AsyncServiceAutoConfiguration
 
     @Override
     public void onApplicationEvent(ApplicationStartedEvent event) {
+
         // 应用启动起来后再启动异步任务系统
         AsyncTaskService asyncTaskService = context.getBean(AsyncTaskService.class);
         asyncTaskService.start();
@@ -90,59 +90,7 @@ public class AsyncServiceAutoConfiguration
     @Bean
     @ConditionalOnMissingBean
     public ProcessorRegistry processorRegistry() {
-        return new ProcessorRegistry() {
-
-            volatile Map<String, AbstractAsyncTaskProcessor<?>> processors;
-
-            @Override
-            public AbstractAsyncTaskProcessor<?> registerProcessor(String taskType,
-                AbstractAsyncTaskProcessor<?> processor) {
-                if (processors == null) {
-                    init();
-                }
-
-                return processors.put(taskType, processor);
-            }
-
-            @SuppressWarnings("unchecked")
-            @Override
-            public <T, P extends AbstractAsyncTaskProcessor<T>> P removeProcessor(String taskType) {
-                return processors == null ? null : (P)processors.remove(taskType);
-            }
-
-            @Override
-            public Set<String> getAllTaskType() {
-                return processors == null ? Collections.emptySet() : new HashSet<>(processors.keySet());
-            }
-
-            @SuppressWarnings("unchecked")
-            @Override
-            public <T, P extends AbstractAsyncTaskProcessor<T>> P getProcessor(String taskType) {
-                if (processors == null) {
-                    init();
-                }
-
-                return (P)processors.get(taskType);
-            }
-
-            @SuppressWarnings("rawtypes")
-            private synchronized void init() {
-                if (processors != null) {
-                    return;
-                }
-
-                Map<String, AbstractAsyncTaskProcessor<?>> processors = new HashMap<>();
-                String[] beanNames = context.getBeanNamesForType(AbstractAsyncTaskProcessor.class);
-                for (final String beanName : beanNames) {
-                    AbstractAsyncTaskProcessor processor = context.getBean(beanName, AbstractAsyncTaskProcessor.class);
-                    for (String name : processor.processors()) {
-                        processors.put(name, processor);
-                    }
-                }
-
-                this.processors = new ConcurrentHashMap<>(processors);
-            }
-        };
+        return new SpringProcessorRegistry();
     }
 
     @Bean

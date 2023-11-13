@@ -25,6 +25,7 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.flow.FlowService;
@@ -65,6 +66,7 @@ import lombok.CustomLog;
 @CustomLog
 @Configuration
 @EnableConfigurationProperties({FlowServiceConfigModel.class})
+@Order(300)
 public class FlowServiceAutoConfiguration
     implements ApplicationContextAware, ApplicationListener<ApplicationStartedEvent> {
 
@@ -113,12 +115,12 @@ public class FlowServiceAutoConfiguration
 
     }
 
-    @Bean(initMethod = "start", destroyMethod = "stop")
+    @Bean(destroyMethod = "stop")
     @ConditionalOnMissingBean
     public FlowService flowService(@Autowired FlowServiceConfig flowServiceConfig,
-        @Autowired StreamTaskEngine streamTaskEngine, @Autowired SetTaskEngine setTaskEngine) {
+        @Autowired StreamTaskEngine streamTaskEngine) {
         LOGGER.debug("当前流式任务服务配置详情为： [{}]", flowServiceConfig);
-        return new FlowServiceImpl(flowServiceConfig, streamTaskEngine, setTaskEngine);
+        return new FlowServiceImpl(flowServiceConfig, streamTaskEngine);
     }
 
     @Bean

@@ -95,8 +95,10 @@ public class FlowTaskTest extends TestEngine {
 
         StreamTaskEngine streamTaskEngine = new StreamTaskEngine(engineConfig, flowServiceConfig.getSchedulerSystem());
         SetTaskEngine setTaskEngine = new SetTaskEngine(engineConfig);
+        asyncTaskService.addProcessor(streamTaskEngine);
+        asyncTaskService.addProcessor(setTaskEngine);
 
-        flowService = new FlowServiceImpl(flowServiceConfig, streamTaskEngine, setTaskEngine);
+        flowService = new FlowServiceImpl(flowServiceConfig, streamTaskEngine);
         flowService.start();
     }
 

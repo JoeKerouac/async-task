@@ -12,27 +12,14 @@
  */
 package com.github.joekerouac.async.task.starter;
 
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
-
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
-import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.EnvironmentAware;
-import org.springframework.context.annotation.ClassPathBeanDefinitionScanner;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.ComponentScans;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
-import org.springframework.core.annotation.AnnotationAttributes;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotationMetadata;
-import org.springframework.core.type.filter.AnnotationTypeFilter;
-import org.springframework.lang.Nullable;
-import org.springframework.util.ClassUtils;
-import org.springframework.util.StringUtils;
 
 import com.github.joekerouac.async.task.starter.annotations.AsyncTaskProcessor;
+import com.github.joekerouac.async.task.starter.util.SpringUtil;
 
 /**
  * @author JoeKerouac
@@ -48,77 +35,11 @@ public class AsyncTaskProcessorAutoScanner implements ImportBeanDefinitionRegist
         this.environment = environment;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void registerBeanDefinitions(final AnnotationMetadata importingClassMetadata,
         final BeanDefinitionRegistry registry) {
-
-        Set<String> basePackages = getBasePackages(importingClassMetadata);
-
-        // 从用户设置的扫描目录中扫描我们自定义的注解
-        ClassPathBeanDefinitionScanner scanner = new ClassPathBeanDefinitionScanner(registry, false, environment);
-        scanner.addIncludeFilter(new AnnotationTypeFilter(AsyncTaskProcessor.class));
-        scanner.scan(basePackages.toArray(new String[0]));
-    }
-
-    /**
-     * 从importingClass的AnnotationMetadata中获取用户设置的扫描目录
-     * 
-     * @param importingClassMetadata
-     *            importingClassMetadata
-     * @return 用户设置的扫描包配置
-     */
-    private Set<String> getBasePackages(final AnnotationMetadata importingClassMetadata) {
-        Set<AnnotationAttributes> componentScans = attributesForRepeatable(importingClassMetadata,
-            ComponentScans.class.getName(), ComponentScan.class.getName());
-
-        // 扫描包
-        Set<String> basePackages = new LinkedHashSet<>();
-
-        for (final AnnotationAttributes componentScan : componentScans) {
-            String[] basePackagesArray = componentScan.getStringArray("basePackages");
-            for (String pkg : basePackagesArray) {
-                String[] tokenized = StringUtils.tokenizeToStringArray(environment.resolvePlaceholders(pkg),
-                    ConfigurableApplicationContext.CONFIG_LOCATION_DELIMITERS);
-                Collections.addAll(basePackages, tokenized);
-            }
-            for (Class<?> clazz : componentScan.getClassArray("basePackageClasses")) {
-                basePackages.add(ClassUtils.getPackageName(clazz));
-            }
-            if (basePackages.isEmpty()) {
-                basePackages.add(ClassUtils.getPackageName(importingClassMetadata.getClassName()));
-            }
-        }
-
-        return basePackages;
-    }
-
-    @SuppressWarnings("all")
-    private static Set<AnnotationAttributes> attributesForRepeatable(AnnotationMetadata metadata,
-        String containerClassName, String annotationClassName) {
-
-        Set<AnnotationAttributes> result = new LinkedHashSet<>();
-
-        // Direct annotation present?
-        addAttributesIfNotNull(result, metadata.getAnnotationAttributes(annotationClassName, false));
-
-        // Container annotation present?
-        Map<String, Object> container = metadata.getAnnotationAttributes(containerClassName, false);
-        if (container != null && container.containsKey("value")) {
-            for (Map<String, Object> containedAttributes : (Map<String, Object>[])container.get("value")) {
-                addAttributesIfNotNull(result, containedAttributes);
-            }
-        }
-
-        // Return merged result
-        return Collections.unmodifiableSet(result);
-    }
-
-    private static void addAttributesIfNotNull(Set<AnnotationAttributes> result,
-        @Nullable Map<String, Object> attributes) {
-
-        if (attributes != null) {
-            result.add(AnnotationAttributes.fromMap(attributes));
-        }
+        SpringUtil.scanAndRegisterBean(environment, importingClassMetadata, registry, AsyncTaskProcessor.class);
     }
 
 }
