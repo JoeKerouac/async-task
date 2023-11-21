@@ -150,6 +150,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
      *            要执行的任务
      */
     protected void runTask(AsyncTask task) {
+        Long t0 = System.currentTimeMillis();
         LOGGER.info("准备执行任务: [{}]", task);
 
         String taskRequestId = task.getRequestId();
@@ -204,6 +205,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             traceScope = traceService.resume(task.getRetry(), traceContext);
         }
 
+        Long t1 = System.currentTimeMillis();
+
         try {
             result = processor.process(requestId, context, cache);
             result = result == null ? ExecResult.SUCCESS : result;
@@ -215,7 +218,10 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         // 是否还需要retry
         boolean retry = false;
 
-        LOGGER.info(throwable, "任务执行结果：[{}:{}:{}]", requestId, result, context);
+        Long t2 = System.currentTimeMillis();
+
+        LOGGER.info(throwable, "任务执行结果：[{}:{}:{}], 总耗时: {}ms, 任务执行耗时: {}ms", requestId, result, context, t2 - t0,
+            t2 - t1);
         try {
             switch (result) {
                 case SUCCESS:
