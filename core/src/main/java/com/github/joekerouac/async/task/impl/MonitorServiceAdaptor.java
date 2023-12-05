@@ -34,47 +34,47 @@ public class MonitorServiceAdaptor implements MonitorService {
 
     @Override
     public void duplicateTask(String requestId, Object task) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.info("重复添加任务，requestId: [{}], task: [{}]", requestId, task);
+        DEFAULT_ASYNC_MONITOR_LOGGER.info("[重复添加任务], requestId: [{}], task: [{}]", requestId, task);
     }
 
     @Override
     public void noProcessor(final String requestId, final String task, final String processor) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.error("当前task没有找到指定处理器 [{}:{}:{}]", requestId, task, processor);
+        DEFAULT_ASYNC_MONITOR_LOGGER.error("[当前task没有找到指定处理器] [{}:{}:{}]", requestId, task, processor);
     }
 
     @Override
     public void processRetry(final String requestId, final Object task, final Object processor,
         final Throwable throwable, final LocalDateTime execTime) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.warn(throwable, "任务执行时发生了异常，任务将在稍后重试, [{}:{}:{}:{}]", requestId, task, processor,
+        DEFAULT_ASYNC_MONITOR_LOGGER.warn(throwable, "[任务执行时发生了异常] 任务将在稍后重试, [{}:{}:{}:{}]", requestId, task, processor,
             execTime);
     }
 
     @Override
     public void processError(final String requestId, final TaskFinishCode code, final Object task,
         final Object processor, final Throwable throwable) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.error(throwable, "异步任务执行失败, [{}:{}:{}:{}]", requestId, code, task, processor);
+        DEFAULT_ASYNC_MONITOR_LOGGER.error(throwable, "[异步任务执行失败] [{}:{}:{}:{}]", requestId, code, task, processor);
     }
 
     @Override
     public void deserializationError(final String requestId, final String task, final Object processor,
         final Throwable throwable) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.error(throwable, "任务反序列化失败, [{}:{}:{}]", requestId, task, processor);
+        DEFAULT_ASYNC_MONITOR_LOGGER.error(throwable, "[任务反序列化失败] [{}:{}:{}]", requestId, task, processor);
     }
 
     @Override
     public void uncaughtException(final Thread thread, final Throwable e) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.error(e, "异步任务线程未处理异常, [{}]", thread);
+        DEFAULT_ASYNC_MONITOR_LOGGER.error(e, "[异步任务线程未处理异常] [{}]", thread);
     }
 
     @Override
     public void taskExecTimeout(List<AsyncTask> tasks, long timeout) {
         Map<String, List<AsyncTask>> collect = tasks.stream().collect(Collectors.groupingBy(AsyncTask::getExecIp));
         collect.forEach((ip, taskList) -> DEFAULT_ASYNC_MONITOR_LOGGER
-            .warn("任务执行超时，execIp: [{}], timeout: [{}], tasks: [{}]", ip, timeout, taskList));
+            .warn("[任务执行超时] execIp: [{}], timeout: [{}], tasks: [{}]", ip, timeout, taskList));
     }
 
     @Override
     public void taskReExec(AsyncTask task) {
-        DEFAULT_ASYNC_MONITOR_LOGGER.warn("任务执行超时，自动重试，execIp: [{}], tasks: [{}]", task.getExecIp(), task);
+        DEFAULT_ASYNC_MONITOR_LOGGER.warn("[任务执行超时] [自动重试], execIp: [{}], tasks: [{}]", task.getExecIp(), task);
     }
 }

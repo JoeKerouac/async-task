@@ -151,7 +151,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
      */
     protected void runTask(AsyncTask task) {
         Long t0 = System.currentTimeMillis();
-        LOGGER.info("准备执行任务: [{}]", task);
+        LOGGER.info("[taskExec] [{}] 准备执行任务: [{}]", task.getRequestId(), task);
 
         String taskRequestId = task.getRequestId();
 
@@ -163,7 +163,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         if (l > 0) {
             // 理论上不会出现
-            LOGGER.warn("任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", task, now);
+            LOGGER.warn("[taskExec] [{}] 任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", task.getRequestId(), task, now);
             // 注意，这里是专门设计为更新数据库而不把任务加入缓存的，防止任务加入队列中后立即再次到这里
             repository.update(taskRequestId, ExecStatus.READY, null, null, null, null);
             return;
@@ -220,8 +220,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         Long t2 = System.currentTimeMillis();
 
-        LOGGER.info(throwable, "任务执行结果：[{}:{}:{}], 总耗时: {}ms, 任务执行耗时: {}ms", requestId, result, context, t2 - t0,
-            t2 - t1);
+        LOGGER.info(throwable, "[taskExec] [{}] 任务执行结果：[{}:{}], 总耗时: {}ms, 任务执行耗时: {}ms", requestId, result, context,
+            t2 - t0, t2 - t1);
         try {
             switch (result) {
                 case SUCCESS:
@@ -259,7 +259,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         task.setRetry(retryCount);
 
                         if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug(throwable, "任务重试, [{}:{}:{}]", requestId, nextExecTime, context);
+                            LOGGER.debug(throwable, "[taskExec] [{}] 任务重试, [{}:{}]", requestId, nextExecTime, context);
                         }
                         monitorService.processRetry(requestId, context, processor, throwable, nextExecTime);
                         // 任务重新加到内存队列中
@@ -270,7 +270,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                     finishTask(repository, processor, requestId, context, TaskFinishCode.USER_ERROR, null, cache);
                     break;
                 default:
-                    throw new IllegalStateException(StringUtils.format("不支持的结果状态： [{}]", result));
+                    throw new IllegalStateException(
+                        StringUtils.format("[taskExec] [{}] 不支持的结果状态： [{}], task: [{}]", requestId, result, task));
             }
         } finally {
             if (traceService != null && traceContext != null) {

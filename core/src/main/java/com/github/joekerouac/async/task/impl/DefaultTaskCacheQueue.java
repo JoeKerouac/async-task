@@ -292,13 +292,13 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             // 如果任务已经不是READY状态，那么就无需处理了
             if (status != ExecStatus.READY) {
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("任务 [{}] 已经在其他机器处理了，无需重复处理", task);
+                    LOGGER.debug("[taskExec] [{}] 任务 [{}] 已经在其他机器处理了，无需重复处理", taskRequestId, task);
                 }
 
                 String execIp = task.getExecIp();
                 // 理论上不应该出现
                 if (Objects.equals(execIp, Const.IP) && task.getTaskFinishCode() != TaskFinishCode.CANCEL) {
-                    LOGGER.warn("当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]", status, task);
+                    LOGGER.warn("[taskExec] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]", taskRequestId, status, task);
                 }
 
                 // 结束锁定循环，重新从内存队列中捞取数据
@@ -306,6 +306,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             }
         }
 
+        LOGGER.debug("[taskExec] [{}] 任务锁定成功, 准备执行", taskRequestId);
         return true;
     }
 
