@@ -36,6 +36,11 @@ public class AsyncThreadPoolConfig {
     private String threadName;
 
     /**
+     * 线程优先级
+     */
+    private Integer priority;
+
+    /**
      * 默认线程上下文类加载器，允许为空；
      */
     private ClassLoader defaultContextClassLoader;

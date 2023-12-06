@@ -27,7 +27,7 @@ import com.github.joekerouac.async.task.spi.ProcessorRegistry;
  */
 public class DefaultProcessorRegistry implements ProcessorRegistry {
 
-    private Map<String, AbstractAsyncTaskProcessor<?>> processors = new ConcurrentHashMap<>();
+    private final Map<String, AbstractAsyncTaskProcessor<?>> processors = new ConcurrentHashMap<>();
 
     @Override
     public AbstractAsyncTaskProcessor<?> registerProcessor(String taskType, AbstractAsyncTaskProcessor<?> processor) {

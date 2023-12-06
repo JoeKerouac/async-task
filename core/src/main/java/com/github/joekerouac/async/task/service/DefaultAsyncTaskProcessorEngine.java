@@ -104,6 +104,9 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         for (int i = 0; i < workerThreads.length; i++) {
             Thread thread = new Thread(() -> {
                 Thread currentThread = Thread.currentThread();
+                if (asyncThreadPoolConfig.getPriority() != null) {
+                    currentThread.setPriority(asyncThreadPoolConfig.getPriority());
+                }
                 currentThread.setContextClassLoader(loader);
                 while (start) {
                     try {
@@ -264,6 +267,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         monitorService.processRetry(requestId, context, processor, throwable, nextExecTime);
                         // 任务重新加到内存队列中
                         repository.update(taskRequestId, ExecStatus.READY, null, nextExecTime, retryCount, Const.IP);
+                        taskCacheQueue.addTask(task);
                     }
                     break;
                 case ERROR:

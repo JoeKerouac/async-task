@@ -200,7 +200,11 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     @Override
     public void addProcessor(final AbstractAsyncTaskProcessor<?> processor) {
         for (String taskType : processor.processors()) {
-            processorRegistry.registerProcessor(taskType, processor);
+            AbstractAsyncTaskProcessor<?> old = processorRegistry.registerProcessor(taskType, processor);
+            Assert.isNull(old,
+                StringUtils.format("当前processor已经存在, taskType: [{}], old: [{}], new: [{}]", taskType,
+                    old == null ? null : old.getClass(), processor.getClass()),
+                ExceptionProviderConst.IllegalArgumentExceptionProvider);
         }
     }
 

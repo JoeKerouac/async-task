@@ -248,15 +248,16 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         cache.put(TASK_CACHE_CACHE_KEY, flowCache);
 
         TaskNode taskNode = taskNodeRepository.selectByRequestId(nodeRequestId);
-        Assert.notNull(taskNode, StringUtils.format("系统异常，无法根据nodeRequestId [{}] 找到节点任务", nodeRequestId),
+        Assert.notNull(taskNode,
+            StringUtils.format("[{}] [{}], 系统异常，无法根据nodeRequestId找到节点任务", requestId, nodeRequestId),
             ExceptionProviderConst.IllegalStateExceptionProvider);
         Assert.assertTrue(taskNode.getStatus() != TaskNodeStatus.INIT,
-            StringUtils.format("当前任务 [{}:{}] 状态异常", nodeRequestId, taskNode),
+            StringUtils.format("[{}] [{}], 当前任务状态异常, taskNode: [{}]", requestId, nodeRequestId, taskNode),
             ExceptionProviderConst.IllegalStateExceptionProvider);
         cache.put(TASK_NODE_CACHE_KEY, taskNode);
 
         if (taskNode.getStatus() == TaskNodeStatus.WAIT) {
-            LOGGER.warn("当前任务 [{}] 还未ready，提前进入了执行，当前中断执行，继续等待", nodeRequestId);
+            LOGGER.warn("[{}] [{}], 当前任务还未ready，提前进入了执行，当前中断执行，继续等待", requestId, nodeRequestId);
             return ExecResult.WAIT;
         }
 
@@ -271,7 +272,7 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
 
             // 注意，找不到处理器时抛出异常，等待重试，因为可能时发布过程中的不兼容问题导致的，可能给个机会调度到最新代码的机器上就可以执行了
             Assert.notNull(processor,
-                StringUtils.format("任务 [{}] 对应的处理器 [{}] 不存在", nodeRequestId, taskNode.getProcessor()),
+                StringUtils.format("[{}] [{}], 任务对应的处理器 [{}] 不存在", requestId, nodeRequestId, taskNode.getProcessor()),
                 ExceptionProviderConst.UnsupportedOperationExceptionProvider);
             cache.put(TASK_PROCESSOR_CACHE_KEY, processor);
 
