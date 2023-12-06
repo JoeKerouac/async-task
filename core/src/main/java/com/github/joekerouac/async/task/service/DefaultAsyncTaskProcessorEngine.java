@@ -267,6 +267,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         monitorService.processRetry(requestId, context, processor, throwable, nextExecTime);
                         // 任务重新加到内存队列中
                         repository.update(taskRequestId, ExecStatus.READY, null, nextExecTime, retryCount, Const.IP);
+                        // 立即加入内存队列，任务可能很快就需要重新执行
                         taskCacheQueue.addTask(task);
                     }
                     break;

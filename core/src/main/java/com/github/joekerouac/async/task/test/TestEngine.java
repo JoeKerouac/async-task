@@ -35,6 +35,7 @@ import com.github.joekerouac.async.task.impl.DefaultProcessorRegistry;
 import com.github.joekerouac.async.task.impl.SimpleConnectionManager;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
+import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
 import com.github.joekerouac.async.task.service.AsyncTaskServiceImpl;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
@@ -80,11 +81,26 @@ public class TestEngine {
     public void init() throws Exception {
         this.dataSource = initDataSource(StringUtils.format("{}-test.db", getClass().getSimpleName()));
         this.transactionManager = new AsyncTransactionManagerImpl(new SimpleConnectionManager(dataSource), null);
+        repository = new AsyncTaskRepositoryImpl(transactionManager);
         processorRegistry = new DefaultProcessorRegistry();
 
-        repository = new AsyncTaskRepositoryImpl(transactionManager);
+        AsyncThreadPoolConfig asyncThreadPoolConfig = new AsyncThreadPoolConfig();
+        asyncThreadPoolConfig.setCorePoolSize(3);
+        asyncThreadPoolConfig.setThreadName("异步任务线程");
+        asyncThreadPoolConfig.setPriority(1);
+        asyncThreadPoolConfig.setDefaultContextClassLoader(Thread.currentThread().getContextClassLoader());
+
+        AsyncTaskExecutorConfig asyncTaskExecutorConfig = new AsyncTaskExecutorConfig();
+        asyncTaskExecutorConfig.setCacheQueueSize(10);
+        asyncTaskExecutorConfig.setLoadThreshold(3);
+        asyncTaskExecutorConfig.setLoadInterval(1000 * 5);
+        asyncTaskExecutorConfig.setMonitorInterval(1000 * 5);
+        asyncTaskExecutorConfig.setExecTimeout(1000 * 30);
+        asyncTaskExecutorConfig.setLoadTaskFromRepository(false);
+        asyncTaskExecutorConfig.setThreadPoolConfig(asyncThreadPoolConfig);
+
         asyncServiceConfig = new AsyncServiceConfig();
-        asyncServiceConfig.setDefaultExecutorConfig(new AsyncTaskExecutorConfig());
+        asyncServiceConfig.setDefaultExecutorConfig(asyncTaskExecutorConfig);
         asyncServiceConfig.setTransactionManager(transactionManager);
         asyncServiceConfig.setRepository(repository);
         asyncServiceConfig.setIdGenerator(() -> UUID.randomUUID().toString());
