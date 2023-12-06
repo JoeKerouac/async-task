@@ -298,7 +298,8 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
                 String execIp = task.getExecIp();
                 // 理论上不应该出现
                 if (Objects.equals(execIp, Const.IP) && task.getTaskFinishCode() != TaskFinishCode.CANCEL) {
-                    LOGGER.warn("[taskExec] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]", taskRequestId, status, task);
+                    LOGGER.warn("[taskExec] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]", taskRequestId,
+                        status, task);
                 }
 
                 // 结束锁定循环，重新从内存队列中捞取数据
