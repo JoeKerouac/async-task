@@ -135,15 +135,12 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
     @Override
     public synchronized void stop() {
-        LOGGER.info("异步任务引擎准备关闭...");
         start = false;
 
         // 主动将线程interrupt掉
         for (final Thread thread : workerThreads) {
             thread.interrupt();
         }
-
-        LOGGER.info("异步任务引擎关闭成功...");
     }
 
     /**

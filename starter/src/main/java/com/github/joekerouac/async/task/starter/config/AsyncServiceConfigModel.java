@@ -12,14 +12,16 @@
  */
 package com.github.joekerouac.async.task.starter.config;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Min;
+import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.context.annotation.Configuration;
 
 import com.github.joekerouac.async.task.model.AsyncThreadPoolConfig;
@@ -46,12 +48,30 @@ public class AsyncServiceConfigModel {
      * 默认配置
      */
     @NotNull
+    @NestedConfigurationProperty
     private Config defaultExecutorConfig = new Config();
 
     /**
      * 特定processor配置
      */
-    private Map<Set<String>, Config> executorConfigs;
+    private List<ExecutorConfig> executorConfigs;
+
+    @Data
+    public static class ExecutorConfig {
+
+        /**
+         * 配置所属的处理器列表
+         */
+        @NotEmpty
+        private Set<String> executors;
+
+        /**
+         * 处理器对应的配置
+         */
+        @Valid
+        @NotNull
+        private Config config;
+    }
 
     @Data
     public static class Config {
@@ -72,19 +92,19 @@ public class AsyncServiceConfigModel {
          * 当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒
          */
         @Min(value = 0, message = "上次任务捞取为空时下次任务捞取的最小时间间隔不能小于0")
-        private long loadInterval = 1000 * 5;
+        private long loadInterval = 5000;
 
         /**
          * 触发定时监控的时间间隔，单位毫秒
          */
         @Min(value = 500, message = "监控间隔不能小于500")
-        private long monitorInterval = 1000 * 5;
+        private long monitorInterval = 5000;
 
         /**
          * 任务执行超时监控时间，单位毫秒，如果任务执行超过该时间将会触发监控
          */
         @Min(value = 100, message = "任务执行超时监控时间不能小于100")
-        private long execTimeout = 1000 * 5;
+        private long execTimeout = 5000;
 
         /**
          * 本机启动后添加的任务（不包含本次启动之前添加的任务）执行完毕后，是否从任务仓库中捞取任务，true表示从任务仓库中捞取任务，此时也有可能会执行其他机器添加的任务；
@@ -96,6 +116,7 @@ public class AsyncServiceConfigModel {
          */
         @NotNull(message = "实际执行任务的线程池配置不能为null")
         @Valid
+        @NestedConfigurationProperty
         private AsyncThreadPoolConfig threadPoolConfig = new AsyncThreadPoolConfig();
 
     }

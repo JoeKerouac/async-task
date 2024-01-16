@@ -6,6 +6,18 @@
       "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel"
     },
     {
+      "name": "async.service.default-executor-config",
+      "type": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel",
+      "sourceMethod": "getDefaultExecutorConfig()"
+    },
+    {
+      "name": "async.service.default-executor-config.thread-pool-config",
+      "type": "com.github.joekerouac.async.task.model.AsyncThreadPoolConfig",
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
+      "sourceMethod": "getThreadPoolConfig()"
+    },
+    {
       "name": "flow.service",
       "type": "com.github.joekerouac.async.task.starter.flow.config.FlowServiceConfigModel",
       "sourceType": "com.github.joekerouac.async.task.starter.flow.config.FlowServiceConfigModel"
@@ -13,50 +25,72 @@
   ],
   "properties": [
     {
-      "name": "async.service.auto-clear",
-      "type": "java.lang.Boolean",
-      "description": "是否自动清理执行完成并且执行成功的任务（PS：执行失败的任务不会被自动清理）",
-      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel",
-      "defaultValue": false
-    },
-    {
-      "name": "async.service.cache-queue-size",
-      "type": "java.lang.Integer",
-      "description": "任务缓存队列大小，0表示队列无限长，队列设置太小可能会影响性能；",
-      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel",
-      "defaultValue": 100
-    },
-    {
       "name": "async.service.data-source",
       "type": "java.lang.String",
-      "description": "数据源名称，如果系统没有提供{@link ConnectionSelector ConnectionSelector}这个bean，则需要提供数据源的名称，该数据源中需要包含我们系统所必须的表",
+      "description": "数据源名称，如果系统没有提供{@link com.github.joekerouac.async.task.spi.AsyncTransactionManager AsyncTransactionManager}这个bean，则需要提供数据源的名称，该数据源中需要包含我们系统所必须的表",
       "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel"
     },
     {
-      "name": "async.service.load-interval",
-      "type": "java.lang.Long",
-      "description": "当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒",
-      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel",
-      "defaultValue": 0
+      "name": "async.service.default-executor-config.cache-queue-size",
+      "type": "java.lang.Integer",
+      "description": "任务缓存队列大小，0表示队列无限长，队列设置太小可能会影响性能；",
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
+      "defaultValue": 100
     },
     {
-      "name": "async.service.load-threshold",
+      "name": "async.service.default-executor-config.exec-timeout",
+      "type": "java.lang.Long",
+      "description": "任务执行超时监控时间，单位毫秒，如果任务执行超过该时间将会触发监控",
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
+      "defaultValue": 5000
+    },
+    {
+      "name": "async.service.default-executor-config.load-interval",
+      "type": "java.lang.Long",
+      "description": "当上次任务捞取为空时下次任务捞取的最小时间间隔，当系统从repository中没有获取到任务后必须等待该时间间隔后才能再次捞取，单位毫秒",
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
+      "defaultValue": 5000
+    },
+    {
+      "name": "async.service.default-executor-config.load-task-from-repository",
+      "type": "java.lang.Boolean",
+      "description": "本机启动后添加的任务（不包含本次启动之前添加的任务）执行完毕后，是否从任务仓库中捞取任务，true表示从任务仓库中捞取任务，此时也有可能会执行其他机器添加的任务；",
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
+      "defaultValue": true
+    },
+    {
+      "name": "async.service.default-executor-config.load-threshold",
       "type": "java.lang.Integer",
       "description": "触发捞取任务的队列长度阈值，当任务缓存队列的实际长度小于等于该值时会触发任务捞取，应该小于{@link #cacheQueueSize}；",
-      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel",
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
       "defaultValue": 30
     },
     {
-      "name": "async.service.monitor-interval",
+      "name": "async.service.default-executor-config.monitor-interval",
       "type": "java.lang.Long",
       "description": "触发定时监控的时间间隔，单位毫秒",
-      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel",
-      "defaultValue": 0
+      "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel$Config",
+      "defaultValue": 5000
     },
     {
-      "name": "async.service.thread-pool-config",
-      "type": "com.github.joekerouac.async.task.model.AsyncThreadPoolConfig",
-      "description": "实际执行任务的线程池配置",
+      "name": "async.service.default-executor-config.thread-pool-config.core-pool-size",
+      "type": "java.lang.Integer",
+      "sourceType": "com.github.joekerouac.async.task.model.AsyncThreadPoolConfig"
+    },
+    {
+      "name": "async.service.default-executor-config.thread-pool-config.priority",
+      "type": "java.lang.Integer",
+      "sourceType": "com.github.joekerouac.async.task.model.AsyncThreadPoolConfig"
+    },
+    {
+      "name": "async.service.default-executor-config.thread-pool-config.thread-name",
+      "type": "java.lang.String",
+      "sourceType": "com.github.joekerouac.async.task.model.AsyncThreadPoolConfig"
+    },
+    {
+      "name": "async.service.executor-configs",
+      "type": "java.util.List<com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel.ExecutorConfig>",
+      "description": "特定processor配置",
       "sourceType": "com.github.joekerouac.async.task.starter.config.AsyncServiceConfigModel"
     },
     {

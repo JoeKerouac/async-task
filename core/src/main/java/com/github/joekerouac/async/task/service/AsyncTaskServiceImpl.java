@@ -186,11 +186,13 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     public void stop() {
         synchronized (config) {
             if (start) {
+                LOGGER.info("异步任务引擎准备关闭...");
                 defaultGroup.stop();
                 if (!taskGroupMap.isEmpty()) {
                     taskGroupMap.values().forEach(TaskGroup::stop);
                 }
                 start = false;
+                LOGGER.info("异步任务引擎关闭成功...");
             } else {
                 LOGGER.warn("当前异步任务服务已经关闭，请勿重复调用关闭方法");
             }

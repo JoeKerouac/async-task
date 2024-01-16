@@ -281,12 +281,18 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
      * 
      * @param taskRequestId
      *            任务requestId
-     * @return true表示锁定成功
+     * @return true表示锁定成功，false表示锁定失败，任务不能执行
      */
     private boolean lockTask(String taskRequestId) {
         while (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP) <= 0) {
             // 如果CAS更新失败，则从数据库刷新任务，看任务是否已经不一致了
             AsyncTask task = repository.selectByRequestId(taskRequestId);
+
+            if (task == null) {
+                LOGGER.info("[taskExec] 任务已经被删除, 忽略该任务 [{}]", taskRequestId);
+                return false;
+            }
+
             ExecStatus status = task.getStatus();
 
             // 如果任务已经不是READY状态，那么就无需处理了

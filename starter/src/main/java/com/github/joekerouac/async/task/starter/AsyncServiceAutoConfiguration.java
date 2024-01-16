@@ -13,6 +13,7 @@
 package com.github.joekerouac.async.task.starter;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -116,10 +117,11 @@ public class AsyncServiceAutoConfiguration
 
         config.setDefaultExecutorConfig(convert(asyncServiceConfigModel.getDefaultExecutorConfig()));
 
-        Map<Set<String>, AsyncServiceConfigModel.Config> configs = asyncServiceConfigModel.getExecutorConfigs();
+        List<AsyncServiceConfigModel.ExecutorConfig> configs = asyncServiceConfigModel.getExecutorConfigs();
         Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = new HashMap<>();
         if (!CollectionUtil.isEmpty(configs)) {
-            configs.forEach((key, value) -> executorConfigs.put(key, convert(value)));
+            configs.forEach(executorConfig -> executorConfigs.put(executorConfig.getExecutors(),
+                convert(executorConfig.getConfig())));
         }
 
         config.setExecutorConfigs(executorConfigs);
