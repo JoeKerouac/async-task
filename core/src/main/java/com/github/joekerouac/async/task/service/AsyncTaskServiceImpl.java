@@ -98,11 +98,12 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         this.taskGroupMap = new HashMap<>();
         this.config = config;
 
+        InternalTraceService internalTraceService = new InternalTraceService();
         Map<Set<String>, AsyncTaskExecutorConfig> executorConfigs = config.getExecutorConfigs();
         Set<String> set = new HashSet<>();
         if (!CollectionUtil.isEmpty(executorConfigs)) {
             executorConfigs.forEach((processorNames, executorConfig) -> {
-                TaskGroup taskGroup = build(config, executorConfig, processorNames, true);
+                TaskGroup taskGroup = build(config, executorConfig, processorNames, true, internalTraceService);
                 for (String processorName : processorNames) {
                     Assert.assertTrue(set.add(processorName),
                         StringUtils.format("处理器有多个配置, processor: [{}]", processorName),
@@ -112,7 +113,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             });
         }
 
-        this.defaultGroup = build(config, config.getDefaultExecutorConfig(), set, false);
+        this.defaultGroup = build(config, config.getDefaultExecutorConfig(), set, false, internalTraceService);
 
         TaskClearRunner taskClearRunner = new TaskClearRunner(config.getRepository(), config.getProcessorRegistry());
         Thread taskClearThread = new Thread(taskClearRunner, "异步任务自动清理线程");
@@ -132,10 +133,12 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
      *            任务列表
      * @param contain
      *            true表示异步任务引擎只处理processorGroup中包含的任务，false表示异步任务处理引擎不应该处理processorGroup中包含的任务，而应该处理所有其他任务
+     * @param internalTraceService
+     *            内部trace服务
      * @return 任务组
      */
     private TaskGroup build(AsyncServiceConfig asyncServiceConfig, AsyncTaskExecutorConfig executorConfig,
-        Set<String> taskTypeGroup, boolean contain) {
+        Set<String> taskTypeGroup, boolean contain, InternalTraceService internalTraceService) {
         int cacheQueueSize = executorConfig.getCacheQueueSize();
         int loadThreshold = executorConfig.getLoadThreshold();
         Assert.assertTrue(
@@ -163,6 +166,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         taskGroupConfig.setMonitorInterval(executorConfig.getMonitorInterval());
         taskGroupConfig.setRepository(asyncServiceConfig.getRepository());
         taskGroupConfig.setTransactionManager(asyncServiceConfig.getTransactionManager());
+        taskGroupConfig.setInternalTraceService(internalTraceService);
 
         return new TaskGroup(taskGroupConfig);
     }

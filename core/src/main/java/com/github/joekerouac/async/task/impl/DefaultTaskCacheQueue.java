@@ -31,9 +31,11 @@ import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TaskQueueConfig;
+import com.github.joekerouac.async.task.service.InternalTraceService;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.TaskCacheQueue;
 import com.github.joekerouac.common.tools.collection.Pair;
+import com.github.joekerouac.common.tools.constant.StringConst;
 import com.github.joekerouac.common.tools.lock.LockTaskUtil;
 import com.github.joekerouac.common.tools.scheduler.SimpleSchedulerTask;
 
@@ -206,6 +208,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
         do {
             taskRequestId = takeFromMem();
+            LOGGER.info("[taskExec] [{}] [{}], 从内存获取到任务", InternalTraceService.currentTrace(), taskRequestId);
         } while (!lockTask(taskRequestId));
 
         // 任务锁定后从数据库刷新任务状态，因为内存中的可能已经不对了
@@ -284,12 +287,13 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
      * @return true表示锁定成功，false表示锁定失败，任务不能执行
      */
     private boolean lockTask(String taskRequestId) {
-        while (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, Const.IP) <= 0) {
+        String currentExecIp = Const.IP + StringConst.DOT + InternalTraceService.currentTrace();
+        while (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, currentExecIp) <= 0) {
             // 如果CAS更新失败，则从数据库刷新任务，看任务是否已经不一致了
             AsyncTask task = repository.selectByRequestId(taskRequestId);
 
             if (task == null) {
-                LOGGER.info("[taskExec] 任务已经被删除, 忽略该任务 [{}]", taskRequestId);
+                LOGGER.info("[taskExec] [{}] 任务已经被删除, 忽略该任务 [{}]", InternalTraceService.currentTrace(), taskRequestId);
                 return false;
             }
 
@@ -298,14 +302,15 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             // 如果任务已经不是READY状态，那么就无需处理了
             if (status != ExecStatus.READY) {
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("[taskExec] [{}] 任务 [{}] 已经在其他机器处理了，无需重复处理", taskRequestId, task);
+                    LOGGER.debug("[taskExec] [{}] [{}] 任务 [{}] 已经在其他机器处理了，无需重复处理", InternalTraceService.currentTrace(),
+                        taskRequestId, task);
                 }
 
                 String execIp = task.getExecIp();
                 // 理论上不应该出现
-                if (Objects.equals(execIp, Const.IP) && task.getTaskFinishCode() != TaskFinishCode.CANCEL) {
-                    LOGGER.warn("[taskExec] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]", taskRequestId,
-                        status, task);
+                if (Objects.equals(execIp, currentExecIp) && task.getTaskFinishCode() != TaskFinishCode.CANCEL) {
+                    LOGGER.warn("[taskExec] [{}] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]",
+                        InternalTraceService.currentTrace(), taskRequestId, status, task);
                 }
 
                 // 结束锁定循环，重新从内存队列中捞取数据
@@ -313,7 +318,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             }
         }
 
-        LOGGER.debug("[taskExec] [{}] 任务锁定成功, 准备执行", taskRequestId);
+        LOGGER.debug("[taskExec] [{}] [{}] 任务锁定成功, 准备执行", InternalTraceService.currentTrace(), taskRequestId);
         return true;
     }
 

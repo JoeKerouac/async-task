@@ -120,6 +120,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0-M7</version>
+                <configuration>
+                    <argLine>-Dasync.task.pid.max=100000 -Dfile.encoding=UTF8</argLine>
+                </configuration>
             </plugin>
 
             <!-- 添加license头 -->

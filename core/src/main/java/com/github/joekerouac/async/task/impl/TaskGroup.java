@@ -72,6 +72,7 @@ public class TaskGroup {
         asyncTaskProcessorEngineConfig.setTraceService(taskGroupConfig.getTraceService());
         asyncTaskProcessorEngineConfig.setMonitorService(taskGroupConfig.getMonitorService());
         asyncTaskProcessorEngineConfig.setRepository(taskGroupConfig.getRepository());
+        asyncTaskProcessorEngineConfig.setInternalTraceService(taskGroupConfig.getInternalTraceService());
         return config.getEngineFactory().create(asyncTaskProcessorEngineConfig);
     }
 

@@ -68,6 +68,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
     private final AsyncTaskRepository repository;
 
+    private final InternalTraceService internalTraceService;
+
     /**
      * 记录是否启动
      */
@@ -88,6 +90,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         this.taskCacheQueue = engineConfig.getTaskCacheQueue();
         this.monitorService = engineConfig.getMonitorService();
         this.repository = engineConfig.getRepository();
+        this.internalTraceService = engineConfig.getInternalTraceService();
     }
 
     @Override
@@ -110,12 +113,14 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                 currentThread.setContextClassLoader(loader);
                 while (start) {
                     try {
-                        AsyncTask task = taskCacheQueue.take();
-                        if (task == null) {
-                            return;
-                        }
+                        InternalTraceService.runWithTrace(internalTraceService.generate(), () -> {
+                            AsyncTask task = taskCacheQueue.take();
+                            if (task == null) {
+                                return;
+                            }
 
-                        runTask(task);
+                            runTask(task);
+                        });
                     } catch (Throwable throwable) {
                         if (start || !(throwable instanceof InterruptedException)) {
                             monitorService.uncaughtException(currentThread, throwable);
@@ -151,7 +156,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
      */
     protected void runTask(AsyncTask task) {
         Long t0 = System.currentTimeMillis();
-        LOGGER.info("[taskExec] [{}] 准备执行任务: [{}]", task.getRequestId(), task);
+        LOGGER.info("[taskExec] [{}] [{}] 准备执行任务: [{}]", InternalTraceService.currentTrace(), task.getRequestId(),
+            task);
 
         String taskRequestId = task.getRequestId();
 
@@ -163,7 +169,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         if (l > 0) {
             // 理论上不会出现
-            LOGGER.warn("[taskExec] [{}] 任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", task.getRequestId(), task, now);
+            LOGGER.warn("[taskExec] [{}] [{}] 任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", InternalTraceService.currentTrace(),
+                task.getRequestId(), task, now);
             // 注意，这里是专门设计为更新数据库而不把任务加入缓存的，防止任务加入队列中后立即再次到这里
             repository.update(taskRequestId, ExecStatus.READY, null, null, null, null);
             return;
@@ -220,8 +227,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         Long t2 = System.currentTimeMillis();
 
-        LOGGER.info(throwable, "[taskExec] [{}] 任务执行结果：[{}:{}], 总耗时: {}ms, 任务执行耗时: {}ms", requestId, result, context,
-            t2 - t0, t2 - t1);
+        LOGGER.info(throwable, "[taskExec] [{}] [{}] 任务执行结果：[{}:{}], 总耗时: {}ms, 任务执行耗时: {}ms",
+            InternalTraceService.currentTrace(), requestId, result, context, t2 - t0, t2 - t1);
         try {
             switch (result) {
                 case SUCCESS:
@@ -259,7 +266,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         task.setRetry(retryCount);
 
                         if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug(throwable, "[taskExec] [{}] 任务重试, [{}:{}]", requestId, nextExecTime, context);
+                            LOGGER.debug(throwable, "[taskExec] [{}] [{}] 任务重试, [{}:{}]",
+                                InternalTraceService.currentTrace(), requestId, nextExecTime, context);
                         }
                         monitorService.processRetry(requestId, context, processor, throwable, nextExecTime);
                         // 任务重新加到内存队列中
@@ -273,7 +281,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                     break;
                 default:
                     throw new IllegalStateException(
-                        StringUtils.format("[taskExec] [{}] 不支持的结果状态： [{}], task: [{}]", requestId, result, task));
+                        StringUtils.format("[taskExec] [{}] [{}] 不支持的结果状态： [{}], task: [{}]",
+                            InternalTraceService.currentTrace(), requestId, result, task));
             }
         } finally {
             if (traceService != null && traceContext != null) {

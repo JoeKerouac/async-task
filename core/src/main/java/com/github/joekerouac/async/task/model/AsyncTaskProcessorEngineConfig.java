@@ -14,6 +14,7 @@ package com.github.joekerouac.async.task.model;
 
 import javax.validation.constraints.NotNull;
 
+import com.github.joekerouac.async.task.service.InternalTraceService;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.ProcessorRegistry;
@@ -65,4 +66,9 @@ public class AsyncTaskProcessorEngineConfig {
     @NotNull
     private AsyncTaskRepository repository;
 
+    /**
+     * 内部trace
+     */
+    @NotNull
+    private InternalTraceService internalTraceService;
 }

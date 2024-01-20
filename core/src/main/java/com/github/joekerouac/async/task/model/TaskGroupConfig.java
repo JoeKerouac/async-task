@@ -16,6 +16,7 @@ import javax.validation.Valid;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
+import com.github.joekerouac.async.task.service.InternalTraceService;
 import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngineFactory;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
@@ -100,5 +101,11 @@ public class TaskGroupConfig {
      */
     @NotNull
     private AsyncTransactionManager transactionManager;
+
+    /**
+     * 内部trace生成器，只需要保证本实例唯一即可
+     */
+    @NotNull
+    private InternalTraceService internalTraceService;
 
 }
