@@ -212,7 +212,17 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
         } while (!lockTask(taskRequestId));
 
         // 任务锁定后从数据库刷新任务状态，因为内存中的可能已经不对了
-        return repository.selectByRequestId(taskRequestId);
+        AsyncTask asyncTask = repository.selectByRequestId(taskRequestId);
+
+        if (asyncTask == null || asyncTask.getStatus() != ExecStatus.RUNNING) {
+            // 数据库可能是读写的，这里应该能强制让查询走主库
+            asyncTask = repository.selectForUpdate(taskRequestId);
+        }
+
+        if (asyncTask == null) {
+            LOGGER.error("[bug] [task not found] [{}], 任务锁定后丢失", taskRequestId);
+        }
+        return asyncTask;
     }
 
     @Override
@@ -293,8 +303,13 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             AsyncTask task = repository.selectByRequestId(taskRequestId);
 
             if (task == null) {
-                LOGGER.info("[taskExec] [{}] 任务已经被删除, 忽略该任务 [{}]", InternalTraceService.currentTrace(), taskRequestId);
-                return false;
+                // 数据库可能是读写的，这里应该能强制让查询走主库
+                task = repository.selectForUpdate(taskRequestId);
+                if (task == null) {
+                    LOGGER.warn("[taskExec] [{}] 任务已经被删除, 忽略该任务 [{}]", InternalTraceService.currentTrace(),
+                        taskRequestId);
+                    return false;
+                }
             }
 
             ExecStatus status = task.getStatus();
@@ -369,5 +384,4 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
         });
 
     }
-
 }

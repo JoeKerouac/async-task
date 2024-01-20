@@ -95,13 +95,12 @@ public class TaskGroup {
     }
 
     /**
-     * 移除任务
+     * 将任务从内存中移除
      *
      * @param taskRequestIds
      *            任务
      */
     public void removeTask(Set<String> taskRequestIds) {
-        repository.delete(taskRequestIds);
         transactionManager.runAfterCommit(() -> taskCacheQueue.removeTask(taskRequestIds));
     }
 

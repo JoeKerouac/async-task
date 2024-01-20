@@ -51,6 +51,8 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
 
     private static final String SQL_SELECT_BY_ID = "select * from {} where `request_id` = ?";
 
+    private static final String SQL_SELECT_FOR_UPDATE_BY_ID = "select * from {} where `request_id` = ? for update";
+
     private static final String SQL_CAS_UPDATE =
         "update {} set `status` = ?, `exec_ip` = ?, `gmt_update_time` = ? where `request_id` = ? and `status` = ?";
 
@@ -104,6 +106,15 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     @Override
     public AsyncTask selectByRequestId(final String requestId) {
         return runSql(requestId, SQL_SELECT_BY_ID, preparedStatement -> {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            List<AsyncTask> list = buildModel(resultSet);
+            return list.isEmpty() ? null : list.get(0);
+        }, requestId);
+    }
+
+    @Override
+    public AsyncTask selectForUpdate(String requestId) {
+        return runSql(requestId, SQL_SELECT_FOR_UPDATE_BY_ID, preparedStatement -> {
             ResultSet resultSet = preparedStatement.executeQuery();
             List<AsyncTask> list = buildModel(resultSet);
             return list.isEmpty() ? null : list.get(0);

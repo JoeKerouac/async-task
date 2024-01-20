@@ -53,6 +53,15 @@ public interface AsyncTaskRepository {
     AsyncTask selectByRequestId(@NotBlank String requestId);
 
     /**
+     * 根据request id查询AsyncTask
+     *
+     * @param requestId
+     *            创建任务时的requestId
+     * @return AsyncTask
+     */
+    AsyncTask selectForUpdate(@NotBlank String requestId);
+
+    /**
      * CAS更新，将指定任务的状态从期望值修改为目标值，同时将执行任务的IP修改为目标IP，注意：需要保证并发安全；如果当前存在事务，应该加入事务，如果当前没有事务，则不使用事务
      * 
      * @param requestId
