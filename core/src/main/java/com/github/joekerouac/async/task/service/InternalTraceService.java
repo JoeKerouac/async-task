@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import com.github.joekerouac.common.tools.constant.Const;
 import com.github.joekerouac.common.tools.date.DateUtil;
 import com.github.joekerouac.common.tools.function.InterruptedTaskWithoutResult;
 import com.github.joekerouac.common.tools.lock.LockTaskUtil;
@@ -36,6 +37,8 @@ import lombok.CustomLog;
 @CustomLog
 public class InternalTraceService {
 
+    private static final int PID_MAX = Const.IS_WINDOWS ? 0x100000 : 0x10000;
+
     private static final ThreadLocal<String> currentTrace = new ThreadLocal<>();
 
     private final String pid;
@@ -52,7 +55,7 @@ public class InternalTraceService {
 
     InternalTraceService() {
         String pidMaxProp = System.getProperty("async.task.pid.max");
-        int pidMax = 32768;
+        int pidMax = PID_MAX;
         if (StringUtils.isNotBlank(pidMaxProp)) {
             pidMax = Integer.parseInt(pidMaxProp);
         }
