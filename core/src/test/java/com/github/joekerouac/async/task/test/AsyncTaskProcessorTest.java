@@ -197,11 +197,13 @@ public class AsyncTaskProcessorTest extends TestEngine {
         equals(task, taskFromDb);
         Assert.assertEquals(task.getGmtUpdateTime(), taskFromDb.getGmtUpdateTime());
 
-        int updateEffective = repository.casUpdate(task.getRequestId(), ExecStatus.INIT, ExecStatus.FINISH, "123");
+        int updateEffective =
+            repository.casUpdate(task.getRequestId(), ExecStatus.INIT, ExecStatus.FINISH, task.getExecIp(), "123");
         Assert.assertEquals(updateEffective, 0);
         // 这里sleep10毫秒，保证后边的gmt_update_time与原时间肯定不一致
         Thread.sleep(10);
-        updateEffective = repository.casUpdate(task.getRequestId(), ExecStatus.FINISH, ExecStatus.WAIT, "456");
+        updateEffective =
+            repository.casUpdate(task.getRequestId(), ExecStatus.FINISH, ExecStatus.WAIT, task.getExecIp(), "456");
         Assert.assertEquals(updateEffective, 1);
         task.setStatus(ExecStatus.WAIT);
         task.setExecIp("456");

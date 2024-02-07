@@ -26,6 +26,7 @@ import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TaskGroupConfig;
+import com.github.joekerouac.async.task.service.InternalTraceService;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
@@ -33,6 +34,7 @@ import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.TaskCacheQueue;
 
+import com.github.joekerouac.common.tools.constant.StringConst;
 import lombok.CustomLog;
 
 /**
@@ -112,7 +114,21 @@ public class TaskGroup {
      * @return true表示通知成功，false表示通知失败，可能是任务不存在或者当前任务状态已经变化
      */
     public boolean notifyTask(String requestId) {
-        boolean result = repository.casUpdate(requestId, ExecStatus.WAIT, ExecStatus.READY, Const.IP) > 0;
+        AsyncTask asyncTask = repository.selectByRequestId(requestId);
+
+        if (asyncTask == null || asyncTask.getStatus() != ExecStatus.WAIT) {
+            // 数据库可能是读写的，这里应该能强制让查询走主库
+            asyncTask = repository.selectForUpdate(requestId);
+        }
+
+        if (asyncTask == null || asyncTask.getStatus() != ExecStatus.WAIT) {
+            LOGGER.info("当前任务不存在或者状态不是WAIT，忽略, [{}], [{}]", requestId, asyncTask);
+            return false;
+        }
+
+        String ip = Const.IP + StringConst.DOT + config.getInternalTraceService().generate();
+        boolean result =
+            repository.casUpdate(requestId, ExecStatus.WAIT, ExecStatus.READY, asyncTask.getExecIp(), ip) > 0;
         if (result) {
             transactionManager.runAfterCommit(() -> {
                 AsyncTask task = repository.selectByRequestId(requestId);
@@ -138,6 +154,8 @@ public class TaskGroup {
 
         Thread monitorThread = new Thread(() -> {
             MonitorService monitorService = config.getMonitorService();
+            InternalTraceService internalTraceService = config.getInternalTraceService();
+
             while (start) {
                 try {
                     Thread.sleep(config.getMonitorInterval());
@@ -170,7 +188,8 @@ public class TaskGroup {
                             continue;
                         }
                         // 任务更新为ready重新执行，这里不关心是否设置成功，失败了后续还会轮询到
-                        repository.casUpdate(requestId, ExecStatus.RUNNING, ExecStatus.READY, Const.IP);
+                        String ip = Const.IP + StringConst.DOT + internalTraceService.generate();
+                        repository.casUpdate(requestId, ExecStatus.RUNNING, ExecStatus.READY, task.getExecIp(), ip);
                         monitorService.taskReExec(task);
                     }
                     if (!tasks.isEmpty()) {

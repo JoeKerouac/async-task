@@ -298,43 +298,42 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
      */
     private boolean lockTask(String taskRequestId) {
         String currentExecIp = Const.IP + StringConst.DOT + InternalTraceService.currentTrace();
-        while (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, currentExecIp) <= 0) {
-            // 如果CAS更新失败，则从数据库刷新任务，看任务是否已经不一致了
-            AsyncTask task = repository.selectByRequestId(taskRequestId);
+        while (true) {
+            AsyncTask asyncTask = repository.selectByRequestId(taskRequestId);
 
-            if (task == null) {
+            if (asyncTask == null || asyncTask.getStatus() != ExecStatus.READY) {
                 // 数据库可能是读写的，这里应该能强制让查询走主库
-                task = repository.selectForUpdate(taskRequestId);
-                if (task == null) {
-                    LOGGER.warn("[taskExec] [{}] 任务已经被删除, 忽略该任务 [{}]", InternalTraceService.currentTrace(),
-                        taskRequestId);
-                    return false;
-                }
+                asyncTask = repository.selectForUpdate(taskRequestId);
             }
 
-            ExecStatus status = task.getStatus();
+            if (asyncTask == null) {
+                LOGGER.warn("[taskExec] [{}] 任务已经被删除, 忽略该任务 [{}]", InternalTraceService.currentTrace(), taskRequestId);
+                return false;
+            }
 
-            // 如果任务已经不是READY状态，那么就无需处理了
-            if (status != ExecStatus.READY) {
+            if (asyncTask.getStatus() != ExecStatus.READY) {
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("[taskExec] [{}] [{}] 任务 [{}] 已经在其他机器处理了，无需重复处理", InternalTraceService.currentTrace(),
-                        taskRequestId, task);
+                        taskRequestId, asyncTask);
                 }
 
-                String execIp = task.getExecIp();
+                String execIp = asyncTask.getExecIp();
                 // 理论上不应该出现
-                if (Objects.equals(execIp, currentExecIp) && task.getTaskFinishCode() != TaskFinishCode.CANCEL) {
+                if (Objects.equals(execIp, currentExecIp) && asyncTask.getTaskFinishCode() != TaskFinishCode.CANCEL) {
                     LOGGER.warn("[taskExec] [{}] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]",
-                        InternalTraceService.currentTrace(), taskRequestId, status, task);
+                        InternalTraceService.currentTrace(), taskRequestId, asyncTask.getStatus(), asyncTask);
                 }
 
                 // 结束锁定循环，重新从内存队列中捞取数据
                 return false;
             }
-        }
 
-        LOGGER.debug("[taskExec] [{}] [{}] 任务锁定成功, 准备执行", InternalTraceService.currentTrace(), taskRequestId);
-        return true;
+            if (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, asyncTask.getExecIp(),
+                currentExecIp) > 0) {
+                LOGGER.debug("[taskExec] [{}] [{}] 任务锁定成功, 准备执行", InternalTraceService.currentTrace(), taskRequestId);
+                return true;
+            }
+        }
     }
 
     private String takeFromMem() throws InterruptedException {

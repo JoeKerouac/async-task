@@ -71,10 +71,10 @@ public class AsyncServiceAutoConfiguration
 
     @Override
     public void onApplicationEvent(ApplicationStartedEvent event) {
-
         // 应用启动起来后再启动异步任务系统
         AsyncTaskService asyncTaskService = context.getBean(AsyncTaskService.class);
         asyncTaskService.start();
+        Runtime.getRuntime().addShutdownHook(new Thread(asyncTaskService::stop));
     }
 
     @Override
@@ -156,18 +156,19 @@ public class AsyncServiceAutoConfiguration
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnClass(name = {"org.springframework.jdbc.datasource.DataSourceUtils"})
-    public ConnectionManager connectionManager(@Autowired AsyncServiceConfigModel model) throws Throwable {
+    public ConnectionManager connectionManager(@Autowired AsyncServiceConfigModel model,
+        @Autowired(required = false) DataSource dataSource) throws Throwable {
         // 只有用户没有提供 ConnectionSelector 这个bean才会走到这里，现在我们获取用户指定的数据源来构建 ConnectionSelector
-        DataSource dataSource;
+        DataSource usedDataSource;
         if (StringUtils.isNotBlank(model.getDataSource())) {
-            dataSource = context.getBean(model.getDataSource(), DataSource.class);
+            usedDataSource = context.getBean(model.getDataSource(), DataSource.class);
         } else {
-            dataSource = context.getBean(DataSource.class);
+            usedDataSource = dataSource;
         }
 
         return (ConnectionManager)Class
             .forName("com.github.joekerouac.async.task.starter.impl.SpringJdbcConnectionManager")
-            .getConstructor(DataSource.class).newInstance(dataSource);
+            .getConstructor(DataSource.class).newInstance(usedDataSource);
     }
 
     @Bean

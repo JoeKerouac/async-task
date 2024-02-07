@@ -70,12 +70,14 @@ public interface AsyncTaskRepository {
      *            任务当前期望值
      * @param after
      *            修改后的目标值
-     * @param ip
+     * @param beforeIp
+     *            修改前的IP，里边带trace
+     * @param afterIp
      *            执行任务的IP
      * @return 大于0表示更新成功，否则表示更新失败
      */
-    int casUpdate(@NotBlank String requestId, @NotNull ExecStatus before, @NotNull ExecStatus after,
-        @NotBlank String ip);
+    int casUpdate(@NotBlank String requestId, @NotNull ExecStatus before, @NotNull ExecStatus after, String beforeIp,
+        @NotBlank String afterIp);
 
     /**
      * CAS取消，将指定任务的状态从期望值修改为取消状态，同时将执行任务的IP修改为目标IP，注意：需要保证并发安全；如果当前存在事务，应该加入事务，如果当前没有事务，则不使用事务
