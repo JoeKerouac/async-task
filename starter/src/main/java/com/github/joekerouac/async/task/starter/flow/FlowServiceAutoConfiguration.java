@@ -120,7 +120,10 @@ public class FlowServiceAutoConfiguration
     public FlowService flowService(@Autowired FlowServiceConfig flowServiceConfig,
         @Autowired StreamTaskEngine streamTaskEngine) {
         LOGGER.debug("当前流式任务服务配置详情为： [{}]", flowServiceConfig);
-        return new FlowServiceImpl(flowServiceConfig, streamTaskEngine);
+        FlowService flowService = new FlowServiceImpl(flowServiceConfig, streamTaskEngine);
+        // 双保险
+        Runtime.getRuntime().addShutdownHook(new Thread(flowService::stop));
+        return flowService;
     }
 
     @Bean
