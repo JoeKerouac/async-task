@@ -85,7 +85,10 @@ public class AsyncServiceAutoConfiguration
     @Bean(destroyMethod = "stop")
     @ConditionalOnMissingBean
     public AsyncTaskService asyncTaskService(@Autowired AsyncServiceConfig config) {
-        return new AsyncTaskServiceImpl(config);
+        AsyncTaskService asyncTaskService = new AsyncTaskServiceImpl(config);
+        // 双保险
+        Runtime.getRuntime().addShutdownHook(new Thread(asyncTaskService::stop));
+        return asyncTaskService;
     }
 
     @Bean
