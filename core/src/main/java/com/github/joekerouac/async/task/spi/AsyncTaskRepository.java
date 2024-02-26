@@ -113,12 +113,10 @@ public interface AsyncTaskRepository {
         Integer retry, String ip);
 
     /**
-     * 根据结束码查询指定截止日期前执行完毕的任务
+     * 查询指定截止日期前执行完毕并且成功或者取消的任务
      * 
      * @param processor
      *            任务所属处理器
-     * @param finishCode
-     *            结束码
      * @param dateTime
      *            执行时间截止日期
      * @param offset
@@ -127,8 +125,8 @@ public interface AsyncTaskRepository {
      *            分页大小
      * @return 符合条件的数据
      */
-    List<AsyncTask> selectFinishPage(@NotBlank String processor, @NotNull TaskFinishCode finishCode,
-        @NotNull LocalDateTime dateTime, @Min(0) int offset, @Min(1) @Max(200) int limit);
+    List<AsyncTask> selectFinishPage(@NotBlank String processor, @NotNull LocalDateTime dateTime, @Min(0) int offset,
+        @Min(1) @Max(200) int limit);
 
     /**
      * 根据requestId批量删除任务

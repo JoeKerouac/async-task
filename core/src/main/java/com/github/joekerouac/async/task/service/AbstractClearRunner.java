@@ -27,7 +27,7 @@ public abstract class AbstractClearRunner implements Runnable {
     /**
      * 执行时间间隔，单位毫秒
      */
-    private static final long EXEC_INTERVAL = 1000 * 60 * 5;
+    private static final long EXEC_INTERVAL = 1000 * 60 * 60 * 6;
 
     /**
      * 启动标识

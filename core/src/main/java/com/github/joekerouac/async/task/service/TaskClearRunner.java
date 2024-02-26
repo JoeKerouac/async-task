@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.github.joekerouac.async.task.entity.AsyncTask;
-import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.ProcessorRegistry;
@@ -79,7 +78,7 @@ public class TaskClearRunner extends AbstractClearRunner {
                 final LocalDateTime endTime = LocalDateTime.now().plus(-1L * reserve, ChronoUnit.HOURS);
                 // 注意，这里只清理执行成功的
                 final List<AsyncTask> asyncTasks =
-                    asyncTaskRepository.selectFinishPage(processor, TaskFinishCode.SUCCESS, endTime, 0, LOAD_SIZE);
+                    asyncTaskRepository.selectFinishPage(processor, endTime, 0, LOAD_SIZE);
                 if (asyncTasks.isEmpty()) {
                     return;
                 }

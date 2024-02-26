@@ -66,8 +66,8 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
         "select * from {} where `status` = ? and `exec_time` <= ? {dynamic} order by `exec_time` asc limit ? offset ?";
 
     private static final String SQL_SELECT_FINISH_PAGE =
-        "select * from {} where `processor` = ? and `task_finish_code` = ? and `status` = 'FINISH' and `exec_time` <= ?"
-            + " order by `exec_time` asc limit ? offset ?";
+        "select * from {} where `processor` = ? and `task_finish_code` in ('SUCCESS', 'CANCEL') and `status` = 'FINISH' and `exec_time` <= ?"
+            + " limit ? offset ?";
 
     private static final String SQL_DELETE = "delete from {} where `request_id` in (" + PLACEHOLDER + ")";
 
@@ -191,12 +191,11 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     }
 
     @Override
-    public List<AsyncTask> selectFinishPage(final String processor, final TaskFinishCode finishCode,
-        final LocalDateTime dateTime, final int offset, final int limit) {
+    public List<AsyncTask> selectFinishPage(final String processor, final LocalDateTime dateTime, final int offset,
+        final int limit) {
         Object[] params = new Object[5];
         int start = 0;
         params[start++] = processor;
-        params[start++] = finishCode;
         params[start++] = dateTime;
         params[start++] = limit;
         params[start] = offset;
