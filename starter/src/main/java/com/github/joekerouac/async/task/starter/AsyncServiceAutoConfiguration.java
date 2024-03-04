@@ -21,6 +21,9 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
@@ -65,7 +68,7 @@ import lombok.CustomLog;
 @EnableConfigurationProperties({AsyncServiceConfigModel.class})
 @Order(200)
 public class AsyncServiceAutoConfiguration
-    implements ApplicationContextAware, ApplicationListener<ApplicationStartedEvent> {
+        implements ApplicationContextAware, BeanFactoryPostProcessor, ApplicationListener<ApplicationStartedEvent> {
 
     private ApplicationContext context;
 
@@ -75,6 +78,25 @@ public class AsyncServiceAutoConfiguration
         AsyncTaskService asyncTaskService = context.getBean(AsyncTaskService.class);
         asyncTaskService.start();
         Runtime.getRuntime().addShutdownHook(new Thread(asyncTaskService::stop));
+        AsyncServiceConfigModel model = context.getBean(AsyncServiceConfigModel.class);
+        if (StringUtils.isBlank(model.getDataSource())) {
+            return;
+        }
+
+        AutowireCapableBeanFactory autowireCapableBeanFactory = context.getAutowireCapableBeanFactory();
+        if (autowireCapableBeanFactory instanceof ConfigurableListableBeanFactory) {
+            ConfigurableListableBeanFactory beanFactory = (ConfigurableListableBeanFactory) autowireCapableBeanFactory;
+            // 理论上这里只会有一个
+            for (String beanName : beanFactory.getBeanNamesForType(ConnectionManager.class)) {
+                // 手动添加依赖关系，让系统可以正确关闭
+                beanFactory.registerDependentBean(beanName, model.getDataSource());
+            }
+        }
+    }
+
+    @Override
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+
     }
 
     @Override
@@ -85,10 +107,7 @@ public class AsyncServiceAutoConfiguration
     @Bean(destroyMethod = "stop")
     @ConditionalOnMissingBean
     public AsyncTaskService asyncTaskService(@Autowired AsyncServiceConfig config) {
-        AsyncTaskService asyncTaskService = new AsyncTaskServiceImpl(config);
-        // 双保险
-        Runtime.getRuntime().addShutdownHook(new Thread(asyncTaskService::stop));
-        return asyncTaskService;
+        return new AsyncTaskServiceImpl(config);
     }
 
     @Bean
