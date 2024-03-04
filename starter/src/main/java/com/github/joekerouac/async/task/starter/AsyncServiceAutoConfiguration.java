@@ -68,7 +68,7 @@ import lombok.CustomLog;
 @EnableConfigurationProperties({AsyncServiceConfigModel.class})
 @Order(200)
 public class AsyncServiceAutoConfiguration
-        implements ApplicationContextAware, BeanFactoryPostProcessor, ApplicationListener<ApplicationStartedEvent> {
+    implements ApplicationContextAware, BeanFactoryPostProcessor, ApplicationListener<ApplicationStartedEvent> {
 
     private ApplicationContext context;
 
@@ -85,7 +85,7 @@ public class AsyncServiceAutoConfiguration
 
         AutowireCapableBeanFactory autowireCapableBeanFactory = context.getAutowireCapableBeanFactory();
         if (autowireCapableBeanFactory instanceof ConfigurableListableBeanFactory) {
-            ConfigurableListableBeanFactory beanFactory = (ConfigurableListableBeanFactory) autowireCapableBeanFactory;
+            ConfigurableListableBeanFactory beanFactory = (ConfigurableListableBeanFactory)autowireCapableBeanFactory;
             // 理论上这里只会有一个
             for (String beanName : beanFactory.getBeanNamesForType(ConnectionManager.class)) {
                 // 手动添加依赖关系，让系统可以正确关闭
