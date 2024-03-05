@@ -77,7 +77,6 @@ public class AsyncServiceAutoConfiguration
         // 应用启动起来后再启动异步任务系统
         AsyncTaskService asyncTaskService = context.getBean(AsyncTaskService.class);
         asyncTaskService.start();
-        Runtime.getRuntime().addShutdownHook(new Thread(asyncTaskService::stop));
         AsyncServiceConfigModel model = context.getBean(AsyncServiceConfigModel.class);
         if (StringUtils.isBlank(model.getDataSource())) {
             return;
