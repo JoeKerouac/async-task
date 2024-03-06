@@ -144,8 +144,8 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
                 // 从任务仓库中捞取任务
                 List<AsyncTask> tasks =
-                        repository.selectPage(ExecStatus.READY, now.plusSeconds(Math.max(MAX_TIME, loadInterval * 3 / 2)),
-                                0, cacheQueueSize, taskTypeGroup, contain);
+                    repository.selectPage(ExecStatus.READY, now.plusSeconds(Math.max(MAX_TIME, loadInterval * 3 / 2)),
+                        0, cacheQueueSize, taskTypeGroup, contain);
 
                 if (tasks.isEmpty()) {
                     // 没有捞取到任务，记录下本次捞取
@@ -315,14 +315,14 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             if (asyncTask.getStatus() != ExecStatus.READY) {
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("[taskExec] [{}] [{}] 任务 [{}] 已经在其他机器处理了，无需重复处理", InternalTraceService.currentTrace(),
-                            taskRequestId, asyncTask);
+                        taskRequestId, asyncTask);
                 }
 
                 String execIp = asyncTask.getExecIp();
                 // 理论上不应该出现
                 if (Objects.equals(execIp, currentExecIp) && asyncTask.getTaskFinishCode() != TaskFinishCode.CANCEL) {
                     LOGGER.warn("[taskExec] [{}] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]",
-                            InternalTraceService.currentTrace(), taskRequestId, asyncTask.getStatus(), asyncTask);
+                        InternalTraceService.currentTrace(), taskRequestId, asyncTask.getStatus(), asyncTask);
                 }
 
                 // 结束锁定循环，重新从内存队列中捞取数据
@@ -330,7 +330,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             }
 
             if (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, asyncTask.getExecIp(),
-                    currentExecIp) > 0) {
+                currentExecIp) > 0) {
                 LOGGER.debug("[taskExec] [{}] [{}] 任务锁定成功, 准备执行", InternalTraceService.currentTrace(), taskRequestId);
                 return true;
             }
@@ -343,7 +343,8 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
      * 从内存队列中取一个任务
      *
      * @return 任务requestId，系统关闭时返回null
-     * @throws InterruptedException InterruptedException
+     * @throws InterruptedException
+     *             InterruptedException
      */
     private String takeFromMem() throws InterruptedException {
         return LockTaskUtil.runInterruptedTaskWithLock(queueLock.writeLock(), () -> {
