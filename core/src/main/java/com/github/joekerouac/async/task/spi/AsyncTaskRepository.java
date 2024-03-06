@@ -13,7 +13,6 @@
 package com.github.joekerouac.async.task.spi;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -153,8 +152,6 @@ public interface AsyncTaskRepository {
      *            任务状态，不能为空；
      * @param dateTime
      *            指定执行时间；
-     * @param skipTaskRequestIds
-     *            需要跳过的任务request id集合，查询时应该从结果集中跳过这些ID
      * @param offset
      *            分页offset
      * @param limit
@@ -165,7 +162,7 @@ public interface AsyncTaskRepository {
      *            true表示查询的指定的processor分组的任务，false表示查询所有非processor分组中的任务
      * @return 符合条件的数据
      */
-    List<AsyncTask> selectPage(ExecStatus status, LocalDateTime dateTime, Collection<String> skipTaskRequestIds,
-        int offset, int limit, Set<String> processorGroup, boolean contain);
+    List<AsyncTask> selectPage(ExecStatus status, LocalDateTime dateTime, int offset, int limit,
+        Set<String> processorGroup, boolean contain);
 
 }

@@ -16,7 +16,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -229,11 +228,11 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     }
 
     @Override
-    public List<AsyncTask> selectPage(ExecStatus status, LocalDateTime dateTime, Collection<String> skipTaskRequestIds,
-        int offset, int limit, Set<String> processorGroup, boolean contain) {
+    public List<AsyncTask> selectPage(ExecStatus status, LocalDateTime dateTime, int offset, int limit,
+        Set<String> processorGroup, boolean contain) {
         String dynamic = StringConst.EMPTY;
 
-        Object[] params = new Object[4 + processorGroup.size() + skipTaskRequestIds.size()];
+        Object[] params = new Object[4 + processorGroup.size()];
         int start = 0;
         params[start++] = status;
         params[start++] = dateTime;
@@ -244,15 +243,6 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
 
             for (final String processor : processorGroup) {
                 params[start++] = processor;
-            }
-        }
-
-        if (!skipTaskRequestIds.isEmpty()) {
-            String excludeTemp = " and `request_id` not in ({idList}) ";
-            dynamic += excludeTemp.replace("{idList}", generatePlaceholder(skipTaskRequestIds.size()));
-
-            for (final String requestId : skipTaskRequestIds) {
-                params[start++] = requestId;
             }
         }
 

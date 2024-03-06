@@ -17,6 +17,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
@@ -48,6 +50,8 @@ import lombok.CustomLog;
 @CustomLog
 public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine {
 
+    private static final InterruptedException EXIT = new InterruptedException("当前处理器已经退出");
+
     /**
      * 默认工作线程名
      */
@@ -78,7 +82,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
     /**
      * 工作线程
      */
-    private Thread[] workerThreads;
+    private Worker[] workerThreads;
 
     public DefaultAsyncTaskProcessorEngine(AsyncTaskProcessorEngineConfig engineConfig) {
         Assert.notNull(engineConfig, "engineConfig不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
@@ -98,24 +102,22 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         LOGGER.info("异步任务引擎准备启动...");
         start = true;
 
-        workerThreads = new Thread[asyncThreadPoolConfig.getCorePoolSize()];
+        workerThreads = new Worker[asyncThreadPoolConfig.getCorePoolSize()];
         // 默认使用加载本类的class loader作为线程的上下文loader
         ClassLoader loader = asyncThreadPoolConfig.getDefaultContextClassLoader() == null
             ? DefaultAsyncTaskProcessorEngine.class.getClassLoader()
             : asyncThreadPoolConfig.getDefaultContextClassLoader();
 
         for (int i = 0; i < workerThreads.length; i++) {
-            Thread thread = new Thread(() -> {
-                Thread currentThread = Thread.currentThread();
-                if (asyncThreadPoolConfig.getPriority() != null) {
-                    currentThread.setPriority(asyncThreadPoolConfig.getPriority());
-                }
-                currentThread.setContextClassLoader(loader);
+            Worker worker = new Worker(() -> {
+                Thread thread = Thread.currentThread();
+                thread.setContextClassLoader(loader);
                 while (start) {
                     try {
                         InternalTraceService.runWithTrace(internalTraceService.generate(), () -> {
                             AsyncTask task = taskCacheQueue.take();
                             if (task == null) {
+                                // 队列已经关闭，线程退出
                                 return;
                             }
 
@@ -123,16 +125,21 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         });
                     } catch (Throwable throwable) {
                         if (start || !(throwable instanceof InterruptedException)) {
-                            monitorService.uncaughtException(currentThread, throwable);
+                            monitorService.uncaughtException(thread, throwable);
                         }
                     }
                 }
             }, StringUtils.getOrDefault(asyncThreadPoolConfig.getThreadName(), DEFAULT_THREAD_NAME) + "-" + i);
-            // 强制设置为非daemon线程
-            thread.setDaemon(false);
-            thread.start();
 
-            workerThreads[i] = thread;
+            if (asyncThreadPoolConfig.getPriority() != null) {
+                worker.setPriority(asyncThreadPoolConfig.getPriority());
+            }
+
+            // 强制设置为非daemon线程
+            worker.setDaemon(false);
+            worker.start();
+
+            workerThreads[i] = worker;
         }
 
         LOGGER.info("异步任务引擎启动成功...");
@@ -143,8 +150,21 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         start = false;
 
         // 主动将线程interrupt掉
-        for (final Thread thread : workerThreads) {
-            thread.interrupt();
+        for (final Worker worker : workerThreads) {
+            boolean switchStatus;
+            int before;
+            do {
+                before = worker.status;
+                switchStatus = worker.casUpdateStatus(before, Worker.EXIT);
+            } while (!switchStatus);
+        }
+
+        for (Worker worker : workerThreads) {
+            try {
+                worker.join();
+            } catch (InterruptedException e) {
+                LOGGER.warn(e, "关闭等待被中断, [{}]", worker);
+            }
         }
     }
 
@@ -159,7 +179,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         LOGGER.info("[taskExec] [{}] [{}] 准备执行任务: [{}]", InternalTraceService.currentTrace(), task.getRequestId(),
             task);
 
-        String taskRequestId = task.getRequestId();
+        String requestId = task.getRequestId();
 
         // 如果此时任务还不能执行，则将任务重新加到队列中
         LocalDateTime now = LocalDateTime.now();
@@ -172,18 +192,17 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             LOGGER.warn("[taskExec] [{}] [{}] 任务 [{}] 未到执行时间，不执行，跳过执行, 当前时间：[{}]", InternalTraceService.currentTrace(),
                 task.getRequestId(), task, now);
             // 注意，这里是专门设计为更新数据库而不把任务加入缓存的，防止任务加入队列中后立即再次到这里
-            repository.update(taskRequestId, ExecStatus.READY, null, null, null, null);
+            repository.update(requestId, ExecStatus.READY, null, null, null, null);
             return;
         }
 
         // 查找任务处理器
         AbstractAsyncTaskProcessor<Object> processor = processorRegistry.getProcessor(task.getProcessor());
 
-        String requestId = task.getRequestId();
         if (processor == null) {
             monitorService.noProcessor(requestId, task.getTask(), task.getProcessor());
             // 更新状态为没有处理器，无法处理
-            repository.update(taskRequestId, ExecStatus.FINISH, TaskFinishCode.NO_PROCESSOR, null, null, Const.IP);
+            repository.update(requestId, ExecStatus.FINISH, TaskFinishCode.NO_PROCESSOR, null, null, Const.IP);
             return;
         }
 
@@ -196,8 +215,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         } catch (Throwable throwable) {
             monitorService.deserializationError(requestId, task.getTask(), processor, throwable);
             // 这里我们任务反序列化异常是不可重试的，直接将任务结束
-            repository.update(taskRequestId, ExecStatus.FINISH, TaskFinishCode.DESERIALIZATION_ERROR, null, null,
-                Const.IP);
+            repository.update(requestId, ExecStatus.FINISH, TaskFinishCode.DESERIALIZATION_ERROR, null, null, Const.IP);
             return;
         }
 
@@ -214,13 +232,24 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         Long t1 = System.currentTimeMillis();
 
-        try {
-            result = processor.process(requestId, context, cache);
-            result = result == null ? ExecResult.SUCCESS : result;
-        } catch (Throwable e) {
+        Worker worker = Worker.currentWorker();
+
+        // 如果状态更新失败，则表示当前已经是EXIT状态，就无需执行下边的用户代码了
+        boolean interrupt = !worker.casUpdateStatus(Worker.NONINTERRUPTIBLE, Worker.INTERRUPTIBLE);
+        if (interrupt) {
             result = ExecResult.RETRY;
-            throwable = e;
+            throwable = EXIT;
+        } else {
+            try {
+                result = processor.process(requestId, context, cache);
+                result = result == null ? ExecResult.SUCCESS : result;
+            } catch (Throwable e) {
+                result = ExecResult.RETRY;
+                throwable = e;
+            }
         }
+
+        worker.casUpdateStatus(Worker.INTERRUPTIBLE, Worker.NONINTERRUPTIBLE);
 
         // 是否还需要retry
         boolean retry = false;
@@ -271,7 +300,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         }
                         monitorService.processRetry(requestId, context, processor, throwable, nextExecTime);
                         // 任务重新加到内存队列中
-                        repository.update(taskRequestId, ExecStatus.READY, null, nextExecTime, retryCount, Const.IP);
+                        repository.update(requestId, ExecStatus.READY, null, nextExecTime, retryCount, Const.IP);
                         // 立即加入内存队列，任务可能很快就需要重新执行
                         taskCacheQueue.addTask(task);
                     }
@@ -316,6 +345,71 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         // 更新
         repository.update(requestId, ExecStatus.FINISH, code, null, null, Const.IP);
+    }
+
+    private static class Worker extends Thread {
+
+        private static final ThreadLocal<Worker> workerThreadLocal = new ThreadLocal<>();
+
+        /**
+         * 执行中，允许中断
+         */
+        private static final int INTERRUPTIBLE = 0;
+
+        /**
+         * 执行中，无法中断，注意，无法中断的状态必须能快速结束
+         */
+        private static final int NONINTERRUPTIBLE = 1;
+
+        /**
+         * 退出状态
+         */
+        private static final int EXIT = 3;
+
+        private volatile int status = NONINTERRUPTIBLE;
+
+        private final Lock lock = new ReentrantLock();
+
+        public static Worker currentWorker() {
+            return workerThreadLocal.get();
+        }
+
+        public Worker(Runnable target, String name) {
+            super(target, name);
+        }
+
+        public boolean casUpdateStatus(int expect, int update) {
+            // 这里使用锁而不是Atomic类，是因为要保证是否可中断状态更新与interrupt状态更新保持一致
+            lock.lock();
+            try {
+                boolean result = status == expect;
+                if (result) {
+                    status = update;
+                }
+
+                if (update == NONINTERRUPTIBLE) {
+                    // 清空中断标识；注意，这里目前不用判断状态是否切换成功，只要目标是切换到不可中断状态，那这里就要清空标识
+                    Thread.interrupted();
+                } else if (update == EXIT) {
+                    if (result && expect == INTERRUPTIBLE) {
+                        this.interrupt();
+                    }
+                }
+                return result;
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        @Override
+        public void run() {
+            try {
+                workerThreadLocal.set(this);
+                super.run();
+            } finally {
+                workerThreadLocal.remove();
+            }
+        }
     }
 
 }

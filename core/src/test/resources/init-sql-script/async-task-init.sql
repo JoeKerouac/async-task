@@ -19,5 +19,5 @@ create table if not exists `async_task`
 );
 
 create unique index `idx_req` ON `async_task` (`request_id`);
-create index `idx_load` ON `async_task` (`status`, `exec_time`);
+create index `idx_load` ON `async_task` (`status`, `exec_time`, `processor`);
 

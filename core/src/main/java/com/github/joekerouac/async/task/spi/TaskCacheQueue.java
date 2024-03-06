@@ -17,7 +17,8 @@ import java.util.Set;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 
 /**
- * 任务缓存队列
+ * 任务缓存队列，默认情况下，缓存队列先于{@link com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine}启动，同时
+ * 先于{@link com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine}停止
  * 
  * @author JoeKerouac
  * @date 2023-11-09 17:11
@@ -52,9 +53,9 @@ public interface TaskCacheQueue {
     void removeTask(Set<String> taskRequestIds);
 
     /**
-     * 从队列中获取一个可执行任务（到达执行时间），并将任务从队列移除，如果当前没有可执行的任务，则阻塞到有可执行任务为止
-     * 
-     * @return 任务，不能为空
+     * 从队列中获取一个可执行任务（到达执行时间），并将任务从队列移除，如果当前没有可执行的任务，则阻塞到有可执行任务或者系统关闭为止
+     *
+     * @return 任务，系统关闭时返回null
      */
     AsyncTask take() throws InterruptedException;
 

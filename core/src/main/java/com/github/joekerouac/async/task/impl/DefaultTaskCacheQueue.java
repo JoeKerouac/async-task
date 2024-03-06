@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
@@ -54,7 +53,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
     /**
      * 捞取任务时最多往后捞取多长时间，单位秒；
      */
-    private static final int MAX_TIME = 300;
+    private static final int MAX_TIME = 180;
 
     /**
      * 队列锁，对于队列的写操作需要添加该锁
@@ -143,18 +142,10 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
                     return;
                 }
 
-                // 获取当前队列中的所有任务的ID列表
-                List<String> requestIds = LockTaskUtil.runWithLock(queueLock.readLock(),
-                    () -> queue.stream().map(Pair::getKey).collect(Collectors.toList()));
-
-                // 这里捞取的任务应该不仅能填充队列剩余大小，还应该可以多捞取一些，因为存在这样的情况：本机缓存的任务都是未来将要执行的，而任务仓库中有大量其他
-                // 服务示例存储的当前要立即执行的任务，此时如果只捞取队列剩余空间数量的任务，可能会导致其他任务无法被捞取
-                int loadSize = (cacheQueueSize - requestIds.size()) * 2 + 5;
-                loadSize = Math.min(loadSize, cacheQueueSize);
-
                 // 从任务仓库中捞取任务
-                List<AsyncTask> tasks = repository.selectPage(ExecStatus.READY, now.plusSeconds(MAX_TIME), requestIds,
-                    0, loadSize, taskTypeGroup, contain);
+                List<AsyncTask> tasks =
+                        repository.selectPage(ExecStatus.READY, now.plusSeconds(Math.max(MAX_TIME, loadInterval * 3 / 2)),
+                                0, cacheQueueSize, taskTypeGroup, contain);
 
                 if (tasks.isEmpty()) {
                     // 没有捞取到任务，记录下本次捞取
@@ -197,6 +188,8 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             return;
         }
         start = false;
+        // 提前唤醒，结束take等待
+        LockTaskUtil.runWithLock(queueLock.writeLock(), condition::signalAll);
         if (loadTask != null) {
             loadTask.stop();
         }
@@ -204,10 +197,18 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
     @Override
     public AsyncTask take() throws InterruptedException {
+        if (!start) {
+            return null;
+        }
+
         String taskRequestId;
 
         do {
             taskRequestId = takeFromMem();
+            if (taskRequestId == null) {
+                // 返回null时表示系统已经关闭
+                return null;
+            }
             LOGGER.info("[taskExec] [{}] [{}], 从内存获取到任务", InternalTraceService.currentTrace(), taskRequestId);
         } while (!lockTask(taskRequestId));
 
@@ -298,7 +299,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
      */
     private boolean lockTask(String taskRequestId) {
         String currentExecIp = Const.IP + StringConst.DOT + InternalTraceService.currentTrace();
-        while (true) {
+        while (start) {
             AsyncTask asyncTask = repository.selectByRequestId(taskRequestId);
 
             if (asyncTask == null || asyncTask.getStatus() != ExecStatus.READY) {
@@ -314,14 +315,14 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             if (asyncTask.getStatus() != ExecStatus.READY) {
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("[taskExec] [{}] [{}] 任务 [{}] 已经在其他机器处理了，无需重复处理", InternalTraceService.currentTrace(),
-                        taskRequestId, asyncTask);
+                            taskRequestId, asyncTask);
                 }
 
                 String execIp = asyncTask.getExecIp();
                 // 理论上不应该出现
                 if (Objects.equals(execIp, currentExecIp) && asyncTask.getTaskFinishCode() != TaskFinishCode.CANCEL) {
                     LOGGER.warn("[taskExec] [{}] [{}] 当前任务的执行IP与本主机一致，但是状态不是ready, status: [{}], task: [{}]",
-                        InternalTraceService.currentTrace(), taskRequestId, asyncTask.getStatus(), asyncTask);
+                            InternalTraceService.currentTrace(), taskRequestId, asyncTask.getStatus(), asyncTask);
                 }
 
                 // 结束锁定循环，重新从内存队列中捞取数据
@@ -329,19 +330,27 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             }
 
             if (repository.casUpdate(taskRequestId, ExecStatus.READY, ExecStatus.RUNNING, asyncTask.getExecIp(),
-                currentExecIp) > 0) {
+                    currentExecIp) > 0) {
                 LOGGER.debug("[taskExec] [{}] [{}] 任务锁定成功, 准备执行", InternalTraceService.currentTrace(), taskRequestId);
                 return true;
             }
         }
+
+        return false;
     }
 
+    /**
+     * 从内存队列中取一个任务
+     *
+     * @return 任务requestId，系统关闭时返回null
+     * @throws InterruptedException InterruptedException
+     */
     private String takeFromMem() throws InterruptedException {
         return LockTaskUtil.runInterruptedTaskWithLock(queueLock.writeLock(), () -> {
             long waitTime = -1;
 
-            while (true) {
-                while (queue.isEmpty() || waitTime > 0) {
+            while (start) {
+                while (start && (queue.isEmpty() || waitTime > 0)) {
                     if (waitTime < 0) {
                         waitTime = 1000 * 60;
                     }
@@ -355,6 +364,11 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
                     // 重置状态
                     waitTime = -1;
+                }
+
+                if (!start) {
+                    // 系统已经关闭，直接返回null
+                    return null;
                 }
 
                 Pair<String, AsyncTask> pair = queue.first();
@@ -380,6 +394,8 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
                     LOGGER.debug("当前第一个任务执行时间未到, execTime: [{}], now: [{}]", execTime, now);
                 }
             }
+
+            return null;
         });
 
     }

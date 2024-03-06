@@ -147,6 +147,7 @@ public class TaskGroup {
             return;
         }
         start = true;
+        // 注意启动顺序，必须是先启动队列，然后启动线程池
         taskCacheQueue = config.getTaskCacheQueueFactory().build(config.getTaskQueueConfig(), repository);
         taskCacheQueue.start();
         engine = build(config, taskCacheQueue);
@@ -214,8 +215,9 @@ public class TaskGroup {
             return;
         }
         start = false;
-        engine.stop();
+        // 注意，队列必须先于执行线程池关闭
         taskCacheQueue.stop();
+        engine.stop();
     }
 
 }
