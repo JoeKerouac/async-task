@@ -15,6 +15,7 @@ package com.github.joekerouac.async.task.starter.flow;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import com.github.joekerouac.async.task.spi.TraceService;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -130,7 +131,8 @@ public class FlowServiceAutoConfiguration
     @ConditionalOnMissingBean
     public FlowServiceConfig flowServiceConfig(@Autowired FlowServiceConfigModel flowServiceConfigModel,
         @Autowired FlowMonitorService flowMonitorService, @Autowired FlowTaskRepository flowTaskRepository,
-        @Autowired TaskNodeRepository taskNodeRepository, @Autowired TaskNodeMapRepository taskNodeMapRepository) {
+        @Autowired TaskNodeRepository taskNodeRepository, @Autowired TaskNodeMapRepository taskNodeMapRepository,
+        @Autowired(required = false) TraceService traceService) {
         // 下面这几个bean都是async系统提供的，没有用auto wired
         AsyncTaskService asyncTaskService = context.getBean(AsyncTaskService.class);
         IDGenerator idGenerator = context.getBean(IDGenerator.class);
@@ -158,6 +160,7 @@ public class FlowServiceAutoConfiguration
         config.setTaskNodeMapRepository(taskNodeMapRepository);
         config.setTransactionManager(transactionManager);
         config.setSchedulerSystem(schedulerSystem);
+        config.setTraceService(traceService);
 
         Map<String, ExecuteStrategy> strategies = context.getBeansOfType(ExecuteStrategy.class);
         for (final ExecuteStrategy strategy : strategies.values()) {

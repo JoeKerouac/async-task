@@ -49,7 +49,7 @@ import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.ProcessorRegistry;
-import com.github.joekerouac.async.task.spi.TransactionCallback;
+import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.collection.Pair;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
@@ -137,6 +137,8 @@ public class FlowServiceImpl implements FlowService {
 
     private final ProcessorRegistry processorRegistry;
 
+    private final TraceService traceService;
+
     public FlowServiceImpl(FlowServiceConfig config, StreamTaskEngine streamTaskEngine) {
         Const.VALIDATION_SERVICE.validate(config);
         schedulerSystem = config.getSchedulerSystem();
@@ -155,6 +157,7 @@ public class FlowServiceImpl implements FlowService {
         executeStrategies = config.getExecuteStrategies();
 
         starter = new Starter();
+        traceService = config.getTraceService();
 
         this.streamTaskEngine = streamTaskEngine;
 
@@ -258,7 +261,6 @@ public class FlowServiceImpl implements FlowService {
 
     @Override
     public void notifyNode(String nodeRequestId) {
-
         asyncTaskService.notifyTask(nodeRequestId);
     }
 
@@ -271,18 +273,34 @@ public class FlowServiceImpl implements FlowService {
     private void registerStreamTaskBuildTask(String flowTaskRequestId) {
         // 这里可能注册失败，不过我们并不关心
         schedulerSystem.registerTask(new TaskDescriptor(flowTaskRequestId, 1000 * 10, () -> {
+            Throwable throwable = null;
+            Object trace = null;
             try {
+                if (traceService != null) {
+                    trace = traceService.newTrace();
+                }
+                long start = System.currentTimeMillis();
                 buildNodeMap(flowTaskRequestId);
+                LOGGER.debug("无限流任务构建完毕,  [{}:{}]", flowTaskRequestId, (System.currentTimeMillis() - start));
             } catch (Throwable e) {
+                throwable = e;
                 Throwable rootCause = ExceptionUtil.getRootCause(e);
                 // 如果是锁定异常，应该忽略
                 if (!(rootCause instanceof SQLException)
-                    || SqlUtil.causeForUpdateNowaitError((SQLException)rootCause)) {
+                    || !SqlUtil.causeForUpdateNowaitError((SQLException)rootCause)) {
                     // 如果这里因为网络抖动等导致异常，应该可以快速重试的，现在暂时没有处理
                     LOGGER.warn(e, "流式任务批量添加处理失败，等待下次处理");
                 }
+            } finally {
+                if (traceService != null) {
+                    try {
+                        traceService.finish(trace, false, null, throwable);
+                    } catch (Throwable e1) {
+                        LOGGER.warn(e1, "trace结束异常");
+                    }
+                }
             }
-        }));
+        }, true));
     }
 
     /**
@@ -394,7 +412,6 @@ public class FlowServiceImpl implements FlowService {
 
             List<String> taskNodeRequestIds = taskNodes.stream().map(TaskNode::getRequestId)
                 .filter(str -> !str.equals(newFirstNode.getRequestId())).collect(Collectors.toList());
-
             /*
              * 4、开始更新数据库
              */
@@ -475,7 +492,7 @@ public class FlowServiceImpl implements FlowService {
              */
             if (createFlow) {
                 // 有可能第一次添加仅仅添加了一个节点，所以此时没有node map，也不应该保存
-                if (pair.getValue().size() > 0) {
+                if (!pair.getValue().isEmpty()) {
                     // 创建了主任务，那么也应该把任务节点关系构建出来
                     taskNodeMapRepository.save(pair.getValue());
                 }
@@ -500,18 +517,10 @@ public class FlowServiceImpl implements FlowService {
             }
         });
 
-        if (transactionManager.isActualTransactionActive()) {
-            transactionManager.registerCallback(new TransactionCallback() {
-                @Override
-                public void afterCommit() throws RuntimeException {
-                    registerStreamTaskBuildTask(streamId);
-                    schedulerSystem.scheduler(streamId, false);
-                }
-            });
-        } else {
+        transactionManager.runAfterCommit(() -> {
             registerStreamTaskBuildTask(streamId);
             schedulerSystem.scheduler(streamId, false);
-        }
+        });
     }
 
     /**

@@ -41,7 +41,7 @@ public interface ConnectionManager {
     }
 
     /**
-     * 根据async task的requestId选择要使用的Connection，无论当前上下文是否存在连接，都新建一个连接返回
+     * 根据async task的requestId选择要使用的Connection，无论当前上下文是否存在连接，都新建一个连接返回，新建连接应该是没有开启事务的
      *
      * @param requestId
      *            async task的requestId，对于分页查询，这个将为null

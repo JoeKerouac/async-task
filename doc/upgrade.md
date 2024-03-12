@@ -68,3 +68,5 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 - 当数据库使用读写分离，并且对应用透明时（例如云数据库提供的中间件自动读写分离），可能出现任务挂在RUNNING状态的情况，现在查询时使用`select for update`对这种场景强制走主库查询；
 - 解决优雅关机问题；
 - 优化任务捞取；
+- bug fix: 解决事务管理类的bug，例如事务回调执行完成后未删除，导致在其他事务上下文中重复执行，还有其他一系列事务嵌套时可能发生的问题；
+- bug fix: `flow_task`表`idx_status`索引unique修改为non unique；PS：实际应该就是non unique；

@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import javax.sql.DataSource;
 
+import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import org.testng.Assert;
 
 import com.alibaba.druid.pool.DruidDataSource;
@@ -105,6 +106,12 @@ public class TestEngine {
         asyncServiceConfig.setRepository(repository);
         asyncServiceConfig.setIdGenerator(() -> UUID.randomUUID().toString());
         asyncServiceConfig.setProcessorRegistry(processorRegistry);
+        asyncServiceConfig.setMonitorService(new MonitorServiceAdaptor() {
+            @Override
+            public void uncaughtException(Thread thread, Throwable e) {
+                e.printStackTrace();
+            }
+        });
 
         AsyncTaskService service = new AsyncTaskServiceImpl(asyncServiceConfig);
         service.start();

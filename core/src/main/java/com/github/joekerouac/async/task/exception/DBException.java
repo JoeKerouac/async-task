@@ -12,8 +12,6 @@
  */
 package com.github.joekerouac.async.task.exception;
 
-import java.sql.SQLException;
-
 /**
  * @author JoeKerouac
  * @date 2022-10-14 14:37:00
@@ -21,7 +19,15 @@ import java.sql.SQLException;
  */
 public class DBException extends RuntimeException {
 
-    public DBException(final SQLException sqlException) {
-        super(sqlException);
+    public DBException(String message) {
+        super(message);
+    }
+
+    public DBException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public DBException(Throwable cause) {
+        super(cause);
     }
 }

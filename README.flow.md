@@ -92,7 +92,7 @@ create table if not exists `flow_task`
   DEFAULT CHARSET = utf8mb4 comment '流式任务主任务表';
 
 create unique index `idx_req` ON `flow_task` (`request_id`);
-create unique index `idx_status` ON `flow_task` (`type`, `status`, `gmt_update_time`);
+create index `idx_status` ON `flow_task` (`type`, `status`, `gmt_update_time`);
 
 
 create table if not exists `task_node`

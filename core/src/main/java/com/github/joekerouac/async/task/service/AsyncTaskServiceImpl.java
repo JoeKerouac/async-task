@@ -240,9 +240,18 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     public void notifyTask(final String requestId, TransStrategy transStrategy) {
         AsyncTask task = config.getRepository().selectByRequestId(requestId);
 
+        if (task == null) {
+            // 数据库可能是读写的，这里应该能强制让查询走主库
+            task = config.getTransactionManager().runWithTrans(TransStrategy.NOT_SUPPORTED,
+                () -> config.getRepository().selectForUpdate(requestId));
+        }
+
         if (task != null && task.getStatus() == ExecStatus.WAIT) {
+            String processor = task.getProcessor();
             config.getTransactionManager().runWithTrans(transStrategy,
-                () -> getTaskGroup(task.getProcessor()).notifyTask(requestId));
+                () -> getTaskGroup(processor).notifyTask(requestId));
+        } else {
+            LOGGER.warn("当前要唤醒的任务不存在或者状态已经变更: [{}], [{}]", requestId, task);
         }
     }
 
@@ -252,6 +261,13 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
         return config.getTransactionManager().runWithTrans(transStrategy, () -> {
             AsyncTask task = config.getRepository().selectByRequestId(requestId);
+
+            if (task == null) {
+                // 数据库可能是读写的，这里应该能强制让查询走主库
+                task = config.getTransactionManager().runWithTrans(TransStrategy.NOT_SUPPORTED,
+                    () -> config.getRepository().selectForUpdate(requestId));
+            }
+
             if (task == null) {
                 return CancelStatus.NOT_EXIST;
             }

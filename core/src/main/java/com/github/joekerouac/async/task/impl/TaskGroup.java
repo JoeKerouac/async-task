@@ -90,7 +90,7 @@ public class TaskGroup {
         if (result) {
             transactionManager.runAfterCommit(() -> {
                 taskCacheQueue.addTask(task);
-                LOGGER.info("将任务[{}]添加到内存队列中", task);
+                LOGGER.info("任务添加, 将任务[{}]添加到内存队列中", task);
             });
         }
         return result;
@@ -133,8 +133,10 @@ public class TaskGroup {
             transactionManager.runAfterCommit(() -> {
                 AsyncTask task = repository.selectByRequestId(requestId);
                 taskCacheQueue.addTask(task);
-                LOGGER.info("将任务[{}]添加到内存队列中", task);
+                LOGGER.info("任务通知, 将任务[{}]添加到内存队列中", task);
             });
+        } else {
+            LOGGER.info("任务通知失败: [{}]", requestId);
         }
         return result;
     }

@@ -24,6 +24,16 @@ import javax.validation.constraints.NotNull;
 public interface TraceService {
 
     /**
+     * 新建trace
+     *
+     * @return trace上下文，在finish时传入
+     */
+    default Object newTrace() {
+        // 默认不支持
+        return null;
+    }
+
+    /**
      * 将当前trace上下文dump出来
      * 
      * @return trace上下文，返回null时将会认为当前没有trace上下文

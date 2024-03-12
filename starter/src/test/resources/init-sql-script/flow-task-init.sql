@@ -13,4 +13,4 @@ create table if not exists `flow_task`
 );
 
 create unique index `idx_req` ON `flow_task` (`request_id`);
-create unique index `idx_status` ON `flow_task` (`type`);
+create index `idx_status` ON `flow_task` (`type`, `status`, `gmt_update_time`);

@@ -33,6 +33,7 @@ import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.ProcessorRegistry;
+import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.common.tools.scheduler.SchedulerSystem;
 
 import lombok.CustomLog;
@@ -118,6 +119,11 @@ public class FlowServiceConfig {
      */
     @NotNull
     private Map<String, ExecuteStrategy> executeStrategies = new HashMap<>();
+
+    /**
+     * trace服务
+     */
+    private TraceService traceService;
 
     public FlowServiceConfig() {
         // 注册默认执行策略

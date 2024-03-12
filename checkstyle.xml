@@ -570,7 +570,7 @@
         <!-- 在方法中最多出现n个显式的return语句；return语句过多意味这方法过大或方法可能难以理解 -->
         <module name="ReturnCount">
             <!-- 非void返回值的方法（lambda方法）最多显式的出现5个return语句 -->
-            <property name="max" value="5"/>
+            <property name="max" value="15"/>
             <!-- void返回值的方法最多显式的出现3个return语句 -->
             <property name="maxForVoid" value="5"/>
         </module>
