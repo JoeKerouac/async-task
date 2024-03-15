@@ -110,14 +110,12 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
             String ip1 = task1.getCreateIp();
             String ip2 = task2.getCreateIp();
-            if (ip1.equals(ip2)) {
-                return 0;
-            } else if (Const.IP.equals(ip1)) {
+            if (Const.IP.equals(ip1)) {
                 return -1;
             } else if (Const.IP.equals(ip2)) {
                 return 1;
             } else {
-                return 0;
+                return task1.getRequestId().compareTo(task2.getRequestId());
             }
         });
 
@@ -166,7 +164,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             schedulerTask.setInitialDelay(0);
             loadTask = schedulerTask;
         } else {
-            LOGGER.warn("当前需要从数据库中捞取任务执行, taskTypeGroup: [{}], contain: [{}]", taskTypeGroup, contain);
+            LOGGER.warn("当前不需要从数据库中捞取任务执行, taskTypeGroup: [{}], contain: [{}]", taskTypeGroup, contain);
             loadTask = null;
         }
     }
@@ -240,7 +238,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
             // 这里兜底确保任务没有添加过；PS：其实就算任务添加过，后续执行中还会有检查，问题不大
             if (!this.queue.add(new Pair<>(task.getRequestId(), task)) && LOGGER.isDebugEnabled()) {
-                LOGGER.debug("任务 [{}] 已经在队列中了，忽略该任务", task);
+                LOGGER.info("任务 [{}] 已经在队列中了，忽略该任务", task);
             } else {
                 addSuccessCount += 1;
             }

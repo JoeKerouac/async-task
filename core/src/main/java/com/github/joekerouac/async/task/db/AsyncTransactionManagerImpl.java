@@ -426,24 +426,24 @@ public class AsyncTransactionManagerImpl implements AsyncTransactionManager {
         boolean needRelease = resourceHolder.getTid() == context.getTid() && resourceHolder.getRefCount() == 0;
         boolean needCommit = needRelease && resourceHolder.isNeedCommit();
 
-        if (!needRelease || !needCommit) {
+        if (!needCommit) {
             // 可能是嵌套执行
-            LOGGER.debug("当前connection无需释放或者无需主动提交事务, needCommit: [{}]", needCommit);
+            LOGGER.debug("当前connection无需释放或者无需主动提交事务");
 
             if (needRelease) {
                 // 事务不是本管理器管理的，无需提交事务，只需要释放链接资源即可
                 releaseResource(context);
-            }
 
-            // 如果当前引用已经没有了，但是不需要提交，说明事务是在上层管理的，这里将事务回调注册到上层执行
-            List<TransactionCallback> transactionCallbacks = context.getTransactionCallbacks();
-            if (needCommit && !transactionCallbacks.isEmpty()) {
-                transactionCallbacks.sort(Comparator.comparingInt(TransactionCallback::getOrder));
-                // 如果当前有事务回调，并且当前事务是外部管理的，transactionHook不能为空
-                Assert.notNull(transactionHook, "当前事务不是异步任务系统管理的，同时没有引入外部事务hook，无法注册事务回调",
-                    ExceptionProviderConst.IllegalStateExceptionProvider);
-                for (TransactionCallback transactionCallback : context.getTransactionCallbacks()) {
-                    transactionHook.registerCallback(transactionCallback);
+                // 如果当前引用已经没有了，但是不需要提交，说明事务是在上层管理的，这里将事务回调注册到上层执行
+                List<TransactionCallback> transactionCallbacks = context.getTransactionCallbacks();
+                if (!transactionCallbacks.isEmpty()) {
+                    transactionCallbacks.sort(Comparator.comparingInt(TransactionCallback::getOrder));
+                    // 如果当前有事务回调，并且当前事务是外部管理的，transactionHook不能为空
+                    Assert.notNull(transactionHook, "当前事务不是异步任务系统管理的，同时没有引入外部事务hook，无法注册事务回调",
+                        ExceptionProviderConst.IllegalStateExceptionProvider);
+                    for (TransactionCallback transactionCallback : context.getTransactionCallbacks()) {
+                        transactionHook.registerCallback(transactionCallback);
+                    }
                 }
             }
 

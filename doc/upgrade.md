@@ -70,3 +70,4 @@ queue = new TreeSet<>((t0, t1) -> (int)(t0.getValue().atZone(ZoneOffset.systemDe
 - 优化任务捞取；
 - bug fix: 解决事务管理类的bug，例如事务回调执行完成后未删除，导致在其他事务上下文中重复执行，还有其他一系列事务嵌套时可能发生的问题；
 - bug fix: `flow_task`表`idx_status`索引unique修改为non unique；PS：实际应该就是non unique；
+- bug fix: 修复队列问题，如果同一时间加入多个任务，会导致其中一个任务加入队列失败；
