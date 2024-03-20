@@ -40,6 +40,15 @@ public interface TaskNodeRepository {
     void save(@NotEmpty List<TaskNode> nodes);
 
     /**
+     * 根据requestId查询并锁定任务节点
+     *
+     * @param nodeRequestId
+     *            requestId
+     * @return 任务节点
+     */
+    TaskNode selectForUpdate(@NotBlank String nodeRequestId);
+
+    /**
      * 根据requestId查询任务节点
      * 
      * @param nodeRequestId

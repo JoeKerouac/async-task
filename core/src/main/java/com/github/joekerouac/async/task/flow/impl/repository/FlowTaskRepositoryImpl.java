@@ -21,7 +21,6 @@ import java.util.List;
 import javax.validation.constraints.NotNull;
 
 import com.github.joekerouac.async.task.db.AbstractRepository;
-import com.github.joekerouac.async.task.db.DBFuture;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskType;
 import com.github.joekerouac.async.task.flow.model.FlowTask;
@@ -98,14 +97,7 @@ public class FlowTaskRepositoryImpl extends AbstractRepository implements FlowTa
     }
 
     private FlowTask internalSelect(final String requestId, final boolean lock) {
-        boolean needLock = lock;
-        if (needLock && !DBFuture.getSupportSelectForUpdate()) {
-            // 需要加锁，并且当前线程配置的不支持select for update，这里尝试先update来锁定数据
-            runSql(requestId, UPDATE_FOR_LOCK, PreparedStatement::executeUpdate, requestId);
-            needLock = false;
-        }
-
-        return runSql(requestId, needLock ? SELECT_FOR_LOCK : SELECT, preparedStatement -> {
+        return runSql(requestId, lock ? SELECT_FOR_LOCK : SELECT, preparedStatement -> {
             ResultSet resultSet = preparedStatement.executeQuery();
             List<FlowTask> result = buildModel(resultSet);
             return result.isEmpty() ? null : result.get(0);

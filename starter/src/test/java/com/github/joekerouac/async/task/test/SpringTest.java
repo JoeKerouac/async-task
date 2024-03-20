@@ -30,8 +30,8 @@ import com.github.joekerouac.async.task.starter.annotations.EnableAsyncTask;
  * @date 2022-10-14 14:37:00
  * @since 1.0.0
  */
-@EnableAsyncTask
 @SpringBootTest(classes = SpringTest.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@EnableAsyncTask
 @SpringBootApplication
 public class SpringTest extends AbstractTestNGSpringContextTests {
 

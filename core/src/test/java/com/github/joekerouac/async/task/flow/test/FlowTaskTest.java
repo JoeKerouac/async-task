@@ -23,6 +23,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import com.github.joekerouac.async.task.flow.model.FlowTask;
+import com.github.joekerouac.async.task.flow.model.TaskNode;
 import org.testng.Assert;
 import org.testng.annotations.AfterSuite;
 import org.testng.annotations.BeforeSuite;
@@ -71,14 +73,27 @@ public class FlowTaskTest extends TestEngine {
         super.init();
         SchedulerSystemImpl schedulerSystem =
             new SchedulerSystemImpl("流式任务调度系统", ThreadUtil.newThreadPool(new ThreadPoolConfig()), true);
+        schedulerSystem.start();
 
         FlowServiceConfig flowServiceConfig = new FlowServiceConfig();
         flowServiceConfig.setIdGenerator(asyncServiceConfig.getIdGenerator());
         flowServiceConfig.setProcessorRegistry(processorRegistry);
         flowServiceConfig.setAsyncTaskService(asyncTaskService);
         flowServiceConfig.setFlowMonitorService(new FlowMonitorService() {});
-        flowServiceConfig.setFlowTaskRepository(new FlowTaskRepositoryImpl(transactionManager));
-        flowServiceConfig.setTaskNodeRepository(new TaskNodeRepositoryImpl(transactionManager));
+        flowServiceConfig.setFlowTaskRepository(new FlowTaskRepositoryImpl(transactionManager) {
+            @Override
+            public FlowTask selectForLock(String requestId) {
+                // 测试用例使用的是sqllite，不支持for update
+                return select(requestId);
+            }
+        });
+        flowServiceConfig.setTaskNodeRepository(new TaskNodeRepositoryImpl(transactionManager) {
+            @Override
+            public TaskNode selectForUpdate(String nodeRequestId) {
+                // 测试用例使用的是sqllite，不支持for update
+                return selectByRequestId(nodeRequestId);
+            }
+        });
         flowServiceConfig.setTaskNodeMapRepository(new TaskNodeMapRepositoryImpl(transactionManager));
         flowServiceConfig.setTransactionManager(transactionManager);
         flowServiceConfig.setSchedulerSystem(schedulerSystem);
@@ -337,7 +352,6 @@ public class FlowTaskTest extends TestEngine {
         @Override
         public ExecResult process(final String requestId, final TestTask context, final Map<String, Object> cache)
             throws Throwable {
-            System.out.println("准备执行任务：" + context);
             if (consumer != null) {
                 consumer.accept(context);
             }

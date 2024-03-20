@@ -23,16 +23,15 @@ import java.util.UUID;
 
 import javax.sql.DataSource;
 
-import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import org.testng.Assert;
 
 import com.alibaba.druid.pool.DruidDataSource;
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.db.AsyncTransactionManagerImpl;
-import com.github.joekerouac.async.task.db.DBFuture;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.impl.AsyncTaskRepositoryImpl;
 import com.github.joekerouac.async.task.impl.DefaultProcessorRegistry;
+import com.github.joekerouac.async.task.impl.MonitorServiceAdaptor;
 import com.github.joekerouac.async.task.impl.SimpleConnectionManager;
 import com.github.joekerouac.async.task.model.AsyncServiceConfig;
 import com.github.joekerouac.async.task.model.AsyncTaskExecutorConfig;
@@ -68,10 +67,6 @@ public class TestEngine {
     protected AsyncTransactionManager transactionManager;
 
     protected ProcessorRegistry processorRegistry;
-
-    static {
-        DBFuture.setGlobalSupportSelectForUpdate(false);
-    }
 
     /**
      * 初始化

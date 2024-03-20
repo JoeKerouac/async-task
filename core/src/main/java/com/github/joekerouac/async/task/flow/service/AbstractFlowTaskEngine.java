@@ -30,6 +30,7 @@ import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
 import com.github.joekerouac.async.task.model.ExecResult;
 import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TransStrategy;
+import com.github.joekerouac.async.task.service.InternalTraceService;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.ProcessorRegistry;
@@ -247,7 +248,9 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
         Map<String, Object> flowCache = new HashMap<>();
         cache.put(TASK_CACHE_CACHE_KEY, flowCache);
 
-        TaskNode taskNode = taskNodeRepository.selectByRequestId(nodeRequestId);
+        // 如果存在读写库，强制查询走写库，同时我们并未加事务，所以这里并不会实际锁定
+        TaskNode taskNode = taskNodeRepository.selectForUpdate(nodeRequestId);
+
         Assert.notNull(taskNode,
             StringUtils.format("[{}] [{}], 系统异常，无法根据nodeRequestId找到节点任务", requestId, nodeRequestId),
             ExceptionProviderConst.IllegalStateExceptionProvider);
@@ -392,12 +395,16 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
 
         // 执行结束，判断节点是否尾节点，如果是尾节点，处理完毕后直接结束
         if (childNodeList.isEmpty()) {
+            LOGGER.warn("[taskExec] [{}] [{}] 当前节点没有后续节点，终止执行", InternalTraceService.currentTrace(),
+                taskNode.getRequestId());
             taskFinish(taskNode, taskNodeStatus);
             return;
         }
 
         // 开始check子节点是否可以执行
         for (final TaskNode childNode : childNodeList) {
+            LOGGER.warn("[taskExec] [{}] [{}] 唤醒下个节点 [{}]", InternalTraceService.currentTrace(),
+                taskNode.getRequestId(), childNode.getRequestId());
             notifyChild(taskNode, childNode);
         }
     }
@@ -418,6 +425,8 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
 
         if (wakeUpNode.getStatus() == TaskNodeStatus.WAIT) {
             StrategyResult result = decideNodeStatus(notifyNode.getRequestId(), wakeUpNode);
+            LOGGER.info("[taskExec] [{}], 下个节点状态是: [{}:{}]", InternalTraceService.currentTrace(),
+                wakeUpNode.getRequestId(), result);
 
             switch (result) {
                 case UNKNOWN:
@@ -442,7 +451,8 @@ public abstract class AbstractFlowTaskEngine extends AbstractAsyncTaskProcessor<
                     throw new IllegalStateException(StringUtils.format("不支持的状态： [{}]", result));
             }
         } else {
-            LOGGER.info("当前节点 [{}] 已经是 [{}] 状态了，无需处理", wakeUpNode.getRequestId(), wakeUpNode.getStatus());
+            LOGGER.info("[taskExec] [{}], 当前节点 [{}] 已经是 [{}] 状态了，无需处理", InternalTraceService.currentTrace(),
+                wakeUpNode.getRequestId(), wakeUpNode.getStatus());
         }
     }
 

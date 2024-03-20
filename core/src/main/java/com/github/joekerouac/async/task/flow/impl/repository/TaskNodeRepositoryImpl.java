@@ -23,8 +23,8 @@ import com.github.joekerouac.async.task.db.AbstractRepository;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.TaskNode;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeRepository;
-import com.github.joekerouac.async.task.spi.TableNameSelector;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
+import com.github.joekerouac.async.task.spi.TableNameSelector;
 import com.github.joekerouac.common.tools.string.StringUtils;
 
 /**
@@ -53,6 +53,8 @@ public class TaskNodeRepositoryImpl extends AbstractRepository implements TaskNo
     private static final String BATCH_UPDATE_STATUS =
         "update `{}` set `status` = ?, `gmt_update_time` = ? where `request_id` in (" + PLACEHOLDER + ")";
 
+    private static final String SQL_SELECT_FOR_UPDATE_BY_ID = "select * from {} where `request_id` = ? for update";
+
     public TaskNodeRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager) {
         this(transactionManager, task -> DEFAULT_TABLE_NAME);
     }
@@ -65,6 +67,15 @@ public class TaskNodeRepositoryImpl extends AbstractRepository implements TaskNo
     @Override
     public void save(final List<TaskNode> nodes) {
         batchInsert(nodes.get(0).getRequestId(), nodes);
+    }
+
+    @Override
+    public TaskNode selectForUpdate(String nodeRequestId) {
+        return runSql(nodeRequestId, SQL_SELECT_FOR_UPDATE_BY_ID, preparedStatement -> {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            List<TaskNode> list = buildModel(resultSet);
+            return list.isEmpty() ? null : list.get(0);
+        }, nodeRequestId);
     }
 
     @Override

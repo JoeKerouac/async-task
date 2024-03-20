@@ -383,7 +383,7 @@ public class FlowServiceImpl implements FlowService {
             /*
              * 3、开始决策我们新加的任务链的第一个任务是否应该被立即调起
              */
-            TaskNode oldLastNode = taskNodeRepository.selectByRequestId(oldLastNodeRequestId);
+            TaskNode oldLastNode = taskNodeRepository.selectForUpdate(oldLastNodeRequestId);
             TaskNodeStatus oldLastNodeStatus = oldLastNode.getStatus();
 
             // 第一个节点的状态，默认是WAIT
