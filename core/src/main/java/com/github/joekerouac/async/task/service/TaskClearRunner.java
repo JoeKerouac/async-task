@@ -66,7 +66,7 @@ public class TaskClearRunner extends AbstractClearRunner {
         Map<String, Integer> clearDescMap = new HashMap<>();
         for (String taskType : allTaskType) {
             AbstractAsyncTaskProcessor<Object> processor = processorRegistry.getProcessor(taskType);
-            if (processor != null) {
+            if (processor != null && processor.autoClear()) {
                 clearDescMap.put(taskType, processor.reserve());
             }
         }

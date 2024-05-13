@@ -192,7 +192,7 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     @Override
     public List<AsyncTask> selectFinishPage(final String processor, final LocalDateTime dateTime, final int offset,
         final int limit) {
-        Object[] params = new Object[5];
+        Object[] params = new Object[4];
         int start = 0;
         params[start++] = processor;
         params[start++] = dateTime;
