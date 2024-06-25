@@ -17,6 +17,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -82,7 +83,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
     /**
      * 工作线程
      */
-    private Worker[] workerThreads;
+    private Worker[] workers;
 
     public DefaultAsyncTaskProcessorEngine(AsyncTaskProcessorEngineConfig engineConfig) {
         Assert.notNull(engineConfig, "engineConfig不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
@@ -102,16 +103,18 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         LOGGER.info("异步任务引擎准备启动...");
         start = true;
 
-        workerThreads = new Worker[asyncThreadPoolConfig.getCorePoolSize()];
-        // 默认使用加载本类的class loader作为线程的上下文loader
-        ClassLoader loader = asyncThreadPoolConfig.getDefaultContextClassLoader() == null
-            ? DefaultAsyncTaskProcessorEngine.class.getClassLoader()
-            : asyncThreadPoolConfig.getDefaultContextClassLoader();
+        workers = new Worker[asyncThreadPoolConfig.getCorePoolSize()];
 
-        for (int i = 0; i < workerThreads.length; i++) {
+        ThreadFactory threadFactory = asyncThreadPoolConfig.getThreadFactory();
+
+        for (int i = 0; i < workers.length; i++) {
             Worker worker = new Worker(() -> {
                 Thread thread = Thread.currentThread();
-                thread.setContextClassLoader(loader);
+                ClassLoader contextClassLoader = thread.getContextClassLoader();
+                if (contextClassLoader == null) {
+                    thread.setContextClassLoader(DefaultAsyncTaskProcessorEngine.class.getClassLoader());
+                }
+
                 while (start) {
                     try {
                         InternalTraceService.runWithTrace(internalTraceService.generate(), () -> {
@@ -129,17 +132,19 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                         }
                     }
                 }
-            }, StringUtils.getOrDefault(asyncThreadPoolConfig.getThreadName(), DEFAULT_THREAD_NAME) + "-" + i);
+            });
 
+            Thread thread = threadFactory.newThread(worker);
             if (asyncThreadPoolConfig.getPriority() != null) {
-                worker.setPriority(asyncThreadPoolConfig.getPriority());
+                thread.setPriority(asyncThreadPoolConfig.getPriority());
             }
-
+            thread.setName(StringUtils.getOrDefault(asyncThreadPoolConfig.getThreadName(), DEFAULT_THREAD_NAME) + "-" + i);
             // 强制设置为非daemon线程
-            worker.setDaemon(false);
-            worker.start();
+            thread.setDaemon(false);
+            thread.start();
 
-            workerThreads[i] = worker;
+            worker.bindThread = thread;
+            workers[i] = worker;
         }
 
         LOGGER.info("异步任务引擎启动成功...");
@@ -150,7 +155,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         start = false;
 
         // 主动将线程interrupt掉
-        for (final Worker worker : workerThreads) {
+        for (final Worker worker : workers) {
             boolean switchStatus;
             int before;
             do {
@@ -159,9 +164,9 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             } while (!switchStatus);
         }
 
-        for (Worker worker : workerThreads) {
+        for (Worker worker : workers) {
             try {
-                worker.join();
+                worker.bindThread.join();
             } catch (InterruptedException e) {
                 LOGGER.warn(e, "关闭等待被中断, [{}]", worker);
             }
@@ -347,7 +352,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         repository.update(requestId, ExecStatus.FINISH, code, null, null, Const.IP);
     }
 
-    private static class Worker extends Thread {
+    private static class Worker implements Runnable {
 
         private static final ThreadLocal<Worker> workerThreadLocal = new ThreadLocal<>();
 
@@ -370,12 +375,16 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         private final Lock lock = new ReentrantLock();
 
+        private final Runnable delegate;
+
+        private volatile Thread bindThread;
+
         public static Worker currentWorker() {
             return workerThreadLocal.get();
         }
 
-        public Worker(Runnable target, String name) {
-            super(target, name);
+        public Worker(Runnable delegate) {
+            this.delegate = delegate;
         }
 
         public boolean casUpdateStatus(int expect, int update) {
@@ -392,7 +401,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
                     Thread.interrupted();
                 } else if (update == EXIT) {
                     if (result && expect == INTERRUPTIBLE) {
-                        this.interrupt();
+                        Thread.currentThread().interrupt();
                     }
                 }
                 return result;
@@ -405,7 +414,7 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         public void run() {
             try {
                 workerThreadLocal.set(this);
-                super.run();
+                delegate.run();
             } finally {
                 workerThreadLocal.remove();
             }

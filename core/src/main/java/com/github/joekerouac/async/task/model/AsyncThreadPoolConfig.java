@@ -16,6 +16,8 @@ import javax.validation.constraints.Min;
 
 import lombok.Data;
 
+import java.util.concurrent.ThreadFactory;
+
 /**
  * @author JoeKerouac
  * @date 2022-10-14 14:37:00
@@ -41,8 +43,8 @@ public class AsyncThreadPoolConfig {
     private Integer priority;
 
     /**
-     * 默认线程上下文类加载器，允许为空；
+     * 线程工厂，线程名强制使用{@link #threadName}，强制线程为非daemon线程；
      */
-    private ClassLoader defaultContextClassLoader;
+    private ThreadFactory threadFactory;
 
 }
