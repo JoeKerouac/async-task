@@ -183,6 +183,17 @@ public interface AsyncTaskService {
      *
      * @param requestIdSet
      *            任务request id集合
+     * @return 唤醒成功的任务request id集合，其他任务可能因为状态不是wait、任务不存在等导致不会被唤醒
+     */
+    default Set<String> notifyTask(Set<String> requestIdSet) {
+        return notifyTask(requestIdSet, TransStrategy.REQUIRED);
+    }
+
+    /**
+     * 批量唤醒任务，如果任务处于{@link ExecStatus#WAIT}状态，则任务被唤醒，切换到{@link ExecStatus#READY}状态；
+     *
+     * @param requestIdSet
+     *            任务request id集合
      * @param transStrategy
      *            事务策略，当传入的request id集合数量大于1时，下仅支持{@link TransStrategy#REQUIRED}和{@link TransStrategy#REQUIRES_NEW}两种策略
      * @return 唤醒成功的任务request id集合，其他任务可能因为状态不是wait、任务不存在等导致不会被唤醒
@@ -210,6 +221,17 @@ public interface AsyncTaskService {
      * @return 取消结果
      */
     CancelStatus cancelTask(String requestId, TransStrategy transStrategy);
+
+    /**
+     * 批量取消任务
+     *
+     * @param requestIdSet
+     *            要取消的任务requestId
+     * @return 取消结果
+     */
+    default Map<String, CancelStatus> cancelTask(Set<String> requestIdSet) {
+        return cancelTask(requestIdSet, TransStrategy.REQUIRED);
+    }
 
     /**
      * 批量取消任务

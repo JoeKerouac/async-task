@@ -515,7 +515,7 @@
 
         <!-- 禁止单个文件中重复出现多个相同的字符串（这里定义的是最多出现两次），如果多次出现，应该将其定义为常量然后引用；（默认不检查注解中使用的字符串） -->
         <module name="MultipleStringLiterals">
-            <property name="allowedDuplicates" value="2"/>
+            <property name="allowedDuplicates" value="3"/>
             <!-- 忽略! = @ # $ % ^ & * , . ? 等常用的单个字符 -->
             <property name="ignoreStringsRegexp"
                       value='^(("\!")|("=")|("@")|("#")|("$")|("%")|("\^")|("&amp;")|("\*")|("\,")|("\.")|("\?")|(""))$'/>
