@@ -12,19 +12,19 @@
  */
 package com.github.joekerouac.async.task.spi;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Set;
+import com.github.joekerouac.async.task.entity.AsyncTask;
+import com.github.joekerouac.async.task.model.ExecStatus;
+import com.github.joekerouac.async.task.model.TaskFinishCode;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
-
-import com.github.joekerouac.async.task.entity.AsyncTask;
-import com.github.joekerouac.async.task.model.ExecStatus;
-import com.github.joekerouac.async.task.model.TaskFinishCode;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
 
 /**
  * @author JoeKerouac
@@ -52,13 +52,31 @@ public interface AsyncTaskRepository {
     AsyncTask selectByRequestId(@NotBlank String requestId);
 
     /**
-     * 根据request id查询AsyncTask
+     * 根据request id集合批量查询AsyncTask
+     *
+     * @param requestIdSet
+     *            request id集合
+     * @return AsyncTask列表
+     */
+    List<AsyncTask> selectByRequestId(@NotNull Set<String> requestIdSet);
+
+    /**
+     * 根据request id查询AsyncTask并锁定
      *
      * @param requestId
      *            创建任务时的requestId
      * @return AsyncTask
      */
     AsyncTask selectForUpdate(@NotBlank String requestId);
+
+    /**
+     * 根据request id集合批量查询AsyncTask并锁定
+     *
+     * @param requestIdSet
+     *            request id集合
+     * @return AsyncTask列表
+     */
+    List<AsyncTask> selectForUpdate(@NotNull Set<String> requestIdSet);
 
     /**
      * CAS更新，将指定任务的状态从期望值修改为目标值，同时将执行任务的IP修改为目标IP，注意：需要保证并发安全；如果当前存在事务，应该加入事务，如果当前没有事务，则不使用事务
@@ -77,6 +95,22 @@ public interface AsyncTaskRepository {
      */
     int casUpdate(@NotBlank String requestId, @NotNull ExecStatus before, @NotNull ExecStatus after, String beforeIp,
         @NotBlank String afterIp);
+
+    /**
+     * 批量更新，将指定任务的状态修改为目标值，同时将执行任务的IP修改为目标IP，注意：需要保证并发安全；
+     *
+     * @param requestIdSet
+     *            request id集合
+     * @param status
+     *            修改后的目标值
+     * @param taskFinishCode
+     *            修改后的目标值
+     * @param ip
+     *            执行任务的IP
+     * @return 大于0表示更新成功，否则表示更新失败
+     */
+    int batchUpdate(@NotNull Collection<String> requestIdSet, @NotNull ExecStatus status, TaskFinishCode taskFinishCode,
+        @NotBlank String ip);
 
     /**
      * CAS取消，将指定任务的状态从期望值修改为取消状态，同时将执行任务的IP修改为目标IP，注意：需要保证并发安全；如果当前存在事务，应该加入事务，如果当前没有事务，则不使用事务

@@ -12,16 +12,6 @@
  */
 package com.github.joekerouac.async.task.service;
 
-import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
-import javax.validation.constraints.NotNull;
-
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
@@ -38,6 +28,7 @@ import com.github.joekerouac.async.task.model.TaskGroupConfig;
 import com.github.joekerouac.async.task.model.TaskQueueConfig;
 import com.github.joekerouac.async.task.model.TransStrategy;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
+import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.IDGenerator;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.ProcessorRegistry;
@@ -46,8 +37,19 @@ import com.github.joekerouac.common.tools.collection.CollectionUtil;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
-
 import lombok.CustomLog;
+
+import javax.validation.constraints.NotNull;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * @author JoeKerouac
@@ -237,7 +239,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     }
 
     @Override
-    public void notifyTask(final String requestId, TransStrategy transStrategy) {
+    public boolean notifyTask(final String requestId, TransStrategy transStrategy) {
         AsyncTask task = config.getRepository().selectByRequestId(requestId);
 
         if (task == null) {
@@ -248,11 +250,55 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
 
         if (task != null && task.getStatus() == ExecStatus.WAIT) {
             String processor = task.getProcessor();
-            config.getTransactionManager().runWithTrans(transStrategy,
-                () -> getTaskGroup(processor).notifyTask(requestId));
+            AsyncTask notifyTask = task;
+            return config.getTransactionManager().runWithTrans(transStrategy,
+                () -> getTaskGroup(processor).notifyTask(notifyTask));
         } else {
             LOGGER.warn("当前要唤醒的任务不存在或者状态已经变更: [{}], [{}]", requestId, task);
+            return false;
         }
+    }
+
+    @Override
+    public Set<String> notifyTask(Set<String> requestIdSet, TransStrategy transStrategy) {
+        if (requestIdSet.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        if (requestIdSet.size() == 1) {
+            String requestId = requestIdSet.iterator().next();
+            if (notifyTask(requestId, transStrategy)) {
+                return Collections.singleton(requestId);
+            } else {
+                return Collections.emptySet();
+            }
+        }
+
+        if (transStrategy != TransStrategy.REQUIRED && transStrategy != TransStrategy.REQUIRES_NEW) {
+            throw new IllegalArgumentException(
+                StringUtils.format("当前仅支持REQUIRED和REQUIRES_NEW类型的事务, 不支持{}类型的事务", transStrategy));
+        }
+
+        AsyncTaskRepository repository = config.getRepository();
+
+        return config.getTransactionManager().runWithTrans(transStrategy, () -> {
+            // 对于一次唤醒多个，我们直接开启事务，同时加锁唤醒，理论上锁不会有竞争，因为任务期望都是WAIT状态，此时不会有其他地方会尝试加锁
+            List<AsyncTask> asyncTasks = repository.selectForUpdate(requestIdSet);
+
+            Map<String, Set<String>> requestIdMap = asyncTasks.stream().filter(asyncTask -> {
+                if (asyncTask.getStatus() == ExecStatus.WAIT) {
+                    return true;
+                } else {
+                    LOGGER.info("当前任务不存在或者状态不是WAIT，忽略, [{}], [{}]", asyncTask.getRequestId(), asyncTask);
+                    return false;
+                }
+            }).collect(Collectors.groupingBy(AsyncTask::getProcessor,
+                Collectors.mapping(AsyncTask::getRequestId, Collectors.toSet())));
+
+            Set<String> result = new HashSet<>();
+            requestIdMap.forEach((processor, set) -> result.addAll(getTaskGroup(processor).notifyTask(set)));
+            return result;
+        });
     }
 
     @Override
@@ -277,15 +323,65 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
             } else if (task.getStatus() == ExecStatus.FINISH) {
                 return CancelStatus.FINISH;
             } else {
-                // cas取消成功就返回，否则继续循环
-                if (config.getRepository().casCancel(requestId, task.getStatus(), Const.IP) > 0) {
-                    removeTaskFromEngineAfterTransCommit(task);
+                if (getTaskGroup(task.getProcessor()).cancelTask(task)) {
                     return CancelStatus.SUCCESS;
                 } else {
-                    LOGGER.info("任务取消失败，当前任务状态: [{}:{}]", requestId, task.getStatus());
                     return CancelStatus.UNKNOWN;
                 }
             }
+        });
+    }
+
+    @Override
+    public Map<String, CancelStatus> cancelTask(Set<String> requestIdSet, TransStrategy transStrategy) {
+        if (requestIdSet.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        if (requestIdSet.size() == 1) {
+            String requestId = requestIdSet.iterator().next();
+            CancelStatus cancelStatus = cancelTask(requestId, transStrategy);
+            return Collections.singletonMap(requestId, cancelStatus);
+        }
+
+        if (transStrategy != TransStrategy.REQUIRED && transStrategy != TransStrategy.REQUIRES_NEW) {
+            throw new IllegalArgumentException(
+                StringUtils.format("当前仅支持REQUIRED和REQUIRES_NEW类型的事务, 不支持{}类型的事务", transStrategy));
+        }
+
+        AsyncTaskRepository repository = config.getRepository();
+
+        return config.getTransactionManager().runWithTrans(transStrategy, () -> {
+            // 对于一次取消多个，我们直接开启事务，同时加锁取消；
+            List<AsyncTask> asyncTasks = repository.selectForUpdate(requestIdSet);
+            Map<String, AsyncTask> taskMap =
+                asyncTasks.stream().collect(Collectors.toMap(AsyncTask::getRequestId, Function.identity()));
+            Map<String, CancelStatus> result = new HashMap<>();
+            Map<String, Set<String>> requestIdMap = new HashMap<>();
+
+            for (String requestId : requestIdSet) {
+                AsyncTask asyncTask = taskMap.get(requestId);
+                if (asyncTask == null) {
+                    result.put(requestId, CancelStatus.NOT_EXIST);
+                } else if (asyncTask.getStatus() == ExecStatus.RUNNING) {
+                    result.put(requestId, CancelStatus.RUNNING);
+                } else if (asyncTask.getStatus() == ExecStatus.FINISH) {
+                    result.put(requestId, CancelStatus.FINISH);
+                } else {
+                    // 因为我们加锁了，所以只要后边没有抛异常就肯定成功
+                    result.put(requestId, CancelStatus.SUCCESS);
+                    requestIdMap.compute(asyncTask.getProcessor(), (processor, set) -> {
+                        if (set == null) {
+                            set = new HashSet<>();
+                        }
+                        set.add(requestId);
+                        return set;
+                    });
+                }
+            }
+
+            requestIdMap.forEach((processor, set) -> getTaskGroup(processor).cancelTask(set));
+            return result;
         });
     }
 
@@ -337,17 +433,6 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
                 config.getMonitorService().duplicateTask(requestId, task);
             }
         });
-    }
-
-    private void removeTaskFromEngineAfterTransCommit(AsyncTask asyncTask) {
-        Runnable callback = () -> {
-            getTaskGroup(asyncTask.getProcessor()).removeTask(Collections.singleton(asyncTask.getRequestId()));
-            LOGGER.info("将任务[{}]从内存队列中移除", asyncTask);
-        };
-
-        // 如果当前没有事务，直接执行回调就行了
-        config.getTransactionManager().runAfterCommit(callback);
-
     }
 
     private TaskGroup getTaskGroup(String processor) {

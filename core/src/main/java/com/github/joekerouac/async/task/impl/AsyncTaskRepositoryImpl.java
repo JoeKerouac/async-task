@@ -12,16 +12,6 @@
  */
 package com.github.joekerouac.async.task.impl;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-
-import javax.validation.constraints.NotNull;
-
 import com.github.joekerouac.async.task.db.AbstractRepository;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.ExecStatus;
@@ -33,8 +23,17 @@ import com.github.joekerouac.common.tools.constant.StringConst;
 import com.github.joekerouac.common.tools.db.SqlUtil;
 import com.github.joekerouac.common.tools.exception.ExceptionUtil;
 import com.github.joekerouac.common.tools.string.StringUtils;
-
 import lombok.CustomLog;
+
+import javax.validation.constraints.NotNull;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 
 /**
  * @author JoeKerouac
@@ -50,10 +49,19 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
 
     private static final String SQL_SELECT_BY_ID = "select * from {} where `request_id` = ?";
 
-    private static final String SQL_SELECT_FOR_UPDATE_BY_ID = "select * from {} where `request_id` = ? for update";
+    private static final String SQL_SELECT_BY_ID_FOR_UPDATE = "select * from {} where `request_id` = ? for update";
+
+    private static final String SQL_BATCH_SELECT_BY_ID = "select * from {} where `request_id` in (" + PLACEHOLDER + ")";
+
+    private static final String SQL_BATCH_SELECT_BY_ID_FOR_UPDATE =
+        "select * from {} where `request_id` in (" + PLACEHOLDER + ") for update";
 
     private static final String SQL_CAS_UPDATE =
         "update {} set `status` = ?, `exec_ip` = ?, `gmt_update_time` = ? where `request_id` = ? and `status` = ? and `exec_ip` = ?";
+
+    private static final String SQL_BATCH_UPDATE =
+        "update {} set `status` = ?, `exec_ip` = ?, `gmt_update_time` = ?, `task_finish_code` = ? where `request_id` in ("
+            + PLACEHOLDER + ")";
 
     private static final String SQL_CAS_CANCEL =
         "update {} set `status` = \"" + ExecStatus.FINISH + "\", `task_finish_code` = \"" + TaskFinishCode.CANCEL.code()
@@ -112,8 +120,21 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     }
 
     @Override
+    public List<AsyncTask> selectByRequestId(Set<String> requestIdSet) {
+        if (requestIdSet == null || requestIdSet.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String requestId = requestIdSet.iterator().next();
+        String paramsPlaceholder = generatePlaceholder(requestIdSet.size());
+
+        return runSql(requestId, SQL_BATCH_SELECT_BY_ID.replace(PLACEHOLDER, paramsPlaceholder.substring(1)),
+            preparedStatement -> buildModel(preparedStatement.executeQuery()), requestIdSet.toArray());
+    }
+
+    @Override
     public AsyncTask selectForUpdate(String requestId) {
-        return runSql(requestId, SQL_SELECT_FOR_UPDATE_BY_ID, preparedStatement -> {
+        return runSql(requestId, SQL_SELECT_BY_ID_FOR_UPDATE, preparedStatement -> {
             ResultSet resultSet = preparedStatement.executeQuery();
             List<AsyncTask> list = buildModel(resultSet);
             return list.isEmpty() ? null : list.get(0);
@@ -121,10 +142,48 @@ public class AsyncTaskRepositoryImpl extends AbstractRepository implements Async
     }
 
     @Override
+    public List<AsyncTask> selectForUpdate(Set<String> requestIdSet) {
+        if (requestIdSet == null || requestIdSet.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String requestId = requestIdSet.iterator().next();
+        String paramsPlaceholder = generatePlaceholder(requestIdSet.size());
+
+        return runSql(requestId, SQL_BATCH_SELECT_BY_ID_FOR_UPDATE.replace(PLACEHOLDER, paramsPlaceholder.substring(1)),
+            preparedStatement -> buildModel(preparedStatement.executeQuery()), requestIdSet.toArray());
+    }
+
+    @Override
     public int casUpdate(final String requestId, final ExecStatus before, final ExecStatus after, String beforeIp,
         final String afterIp) {
         return runSql(requestId, SQL_CAS_UPDATE, PreparedStatement::executeUpdate, after, afterIp, LocalDateTime.now(),
             requestId, before, beforeIp);
+    }
+
+    @Override
+    public int batchUpdate(Collection<String> requestIdSet, ExecStatus status, TaskFinishCode taskFinishCode,
+        String ip) {
+        if (requestIdSet == null || requestIdSet.isEmpty()) {
+            return 0;
+        }
+
+        String requestId = requestIdSet.iterator().next();
+        String paramsPlaceholder = generatePlaceholder(requestIdSet.size());
+
+        int i = 0;
+        Object[] params = new Object[requestIdSet.size() + 4];
+        params[i++] = status;
+        params[i++] = ip;
+        params[i++] = LocalDateTime.now();
+        params[i++] = taskFinishCode;
+
+        for (String s : requestIdSet) {
+            params[i++] = s;
+        }
+
+        return runSql(requestId, SQL_BATCH_UPDATE.replace(PLACEHOLDER, paramsPlaceholder.substring(1)),
+            PreparedStatement::executeUpdate, params);
     }
 
     @Override

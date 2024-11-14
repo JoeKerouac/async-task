@@ -12,16 +12,6 @@
  */
 package com.github.joekerouac.async.task.flow.service;
 
-import java.sql.SQLException;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
-
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.flow.FlowService;
@@ -62,8 +52,17 @@ import com.github.joekerouac.common.tools.scheduler.TaskDescriptor;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
 import com.github.joekerouac.common.tools.util.Starter;
-
 import lombok.CustomLog;
+
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * @author JoeKerouac
@@ -260,8 +259,13 @@ public class FlowServiceImpl implements FlowService {
     }
 
     @Override
-    public void notifyNode(String nodeRequestId) {
-        asyncTaskService.notifyTask(nodeRequestId);
+    public boolean notifyNode(String requestId, TransStrategy transStrategy) {
+        return asyncTaskService.notifyTask(requestId, transStrategy);
+    }
+
+    @Override
+    public Set<String> notifyNode(Set<String> requestIdSet, TransStrategy transStrategy) {
+        return asyncTaskService.notifyTask(requestIdSet, transStrategy);
     }
 
     /**

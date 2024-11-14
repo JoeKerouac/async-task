@@ -12,12 +12,15 @@
  */
 package com.github.joekerouac.async.task.flow;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotNull;
-
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.FlowTaskModel;
+import com.github.joekerouac.async.task.model.ExecStatus;
+import com.github.joekerouac.async.task.model.TransStrategy;
+
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+import java.util.Set;
 
 /**
  * @author JoeKerouac
@@ -83,6 +86,37 @@ public interface FlowService {
     TaskNodeStatus queryNodeStatus(@NotBlank String nodeRequestId)
         throws IllegalArgumentException, IllegalStateException;
 
-    void notifyNode(String nodeRequestId);
+    /**
+     * 唤醒任务，如果任务处于{@link ExecStatus#WAIT}状态，则任务被唤醒，切换到{@link ExecStatus#READY}状态，如果当前存在事务，应该加入事务，如果当前没有事务，则不使用事务
+     *
+     * @param requestId
+     *            任务requestId
+     * @return true表示唤醒成功，false表示任务不存在、任务状态不是wait等导致唤醒失败
+     */
+    default boolean notifyNode(String requestId) {
+        return notifyNode(requestId, TransStrategy.SUPPORTS);
+    }
+
+    /**
+     * 唤醒任务，如果任务处于{@link ExecStatus#WAIT}状态，则任务被唤醒，切换到{@link ExecStatus#READY}状态
+     *
+     * @param requestId
+     *            任务requestId
+     * @param transStrategy
+     *            事务策略
+     * @return true表示唤醒成功，false表示任务不存在、任务状态不是wait等导致唤醒失败
+     */
+    boolean notifyNode(String requestId, TransStrategy transStrategy);
+
+    /**
+     * 批量唤醒任务，如果任务处于{@link ExecStatus#WAIT}状态，则任务被唤醒，切换到{@link ExecStatus#READY}状态；
+     *
+     * @param requestIdSet
+     *            任务request id集合
+     * @param transStrategy
+     *            事务策略，当传入的request id集合数量大于1时，下仅支持{@link TransStrategy#REQUIRED}和{@link TransStrategy#REQUIRES_NEW}两种策略
+     * @return 唤醒成功的任务request id集合，其他任务可能因为状态不是wait、任务不存在等导致不会被唤醒
+     */
+    Set<String> notifyNode(Set<String> requestIdSet, TransStrategy transStrategy);
 
 }

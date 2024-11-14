@@ -12,19 +12,11 @@
  */
 package com.github.joekerouac.async.task.impl;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import javax.validation.constraints.NotNull;
-
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
 import com.github.joekerouac.async.task.model.ExecStatus;
+import com.github.joekerouac.async.task.model.TaskFinishCode;
 import com.github.joekerouac.async.task.model.TaskGroupConfig;
 import com.github.joekerouac.async.task.service.InternalTraceService;
 import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
@@ -33,9 +25,17 @@ import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
 import com.github.joekerouac.async.task.spi.MonitorService;
 import com.github.joekerouac.async.task.spi.TaskCacheQueue;
-
 import com.github.joekerouac.common.tools.constant.StringConst;
 import lombok.CustomLog;
+
+import javax.validation.constraints.NotNull;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * @author JoeKerouac
@@ -109,36 +109,93 @@ public class TaskGroup {
     /**
      * 唤醒任务，如果任务处于{@link ExecStatus#WAIT}状态，则任务被唤醒，切换到{@link ExecStatus#READY}状态
      *
-     * @param requestId
-     *            任务requestId
+     * @param asyncTask
+     *            要唤醒的任务
      * @return true表示通知成功，false表示通知失败，可能是任务不存在或者当前任务状态已经变化
      */
-    public boolean notifyTask(String requestId) {
-        AsyncTask asyncTask = repository.selectByRequestId(requestId);
-
-        if (asyncTask == null || asyncTask.getStatus() != ExecStatus.WAIT) {
-            // 数据库可能是读写的，这里应该能强制让查询走主库
-            asyncTask = repository.selectForUpdate(requestId);
-        }
-
-        if (asyncTask == null || asyncTask.getStatus() != ExecStatus.WAIT) {
-            LOGGER.info("当前任务不存在或者状态不是WAIT，忽略, [{}], [{}]", requestId, asyncTask);
-            return false;
-        }
-
+    public boolean notifyTask(AsyncTask asyncTask) {
         String ip = Const.IP + StringConst.DOT + config.getInternalTraceService().generate();
-        boolean result =
-            repository.casUpdate(requestId, ExecStatus.WAIT, ExecStatus.READY, asyncTask.getExecIp(), ip) > 0;
+        boolean result = repository.casUpdate(asyncTask.getRequestId(), ExecStatus.WAIT, ExecStatus.READY,
+            asyncTask.getExecIp(), ip) > 0;
         if (result) {
             transactionManager.runAfterCommit(() -> {
-                AsyncTask task = repository.selectByRequestId(requestId);
+                // 这里使用for update，防止查询到的数据是从库的未及时更新的，不过我们这里没有事务，所以实际上并不会锁定
+                AsyncTask task = repository.selectForUpdate(asyncTask.getRequestId());
                 taskCacheQueue.addTask(task);
                 LOGGER.info("任务通知, 将任务[{}]添加到内存队列中", task);
             });
         } else {
-            LOGGER.info("任务通知失败: [{}]", requestId);
+            LOGGER.info("任务通知失败: [{}]", asyncTask.getRequestId());
         }
         return result;
+    }
+
+    /**
+     * 唤醒任务，切换到{@link ExecStatus#READY}状态；注意，要更新的任务调用方必须锁定，并且判断状态，内部不做任何判断
+     *
+     * @param requestIdSet
+     *            任务requestId集合
+     * @return 成功唤醒的任务集合，其他可能因为任务不存在或者任务不是wait状态导致唤醒失败
+     */
+    public Set<String> notifyTask(Set<String> requestIdSet) {
+        if (requestIdSet.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        String ip = Const.IP + StringConst.DOT + config.getInternalTraceService().generate();
+        repository.batchUpdate(requestIdSet, ExecStatus.READY, TaskFinishCode.NONE, ip);
+
+        transactionManager.runAfterCommit(() -> {
+            // 这里使用for update，防止查询到的数据是从库的未及时更新的，不过我们这里没有事务，所以实际上并不会锁定
+            List<AsyncTask> asyncTasks = repository.selectForUpdate(requestIdSet);
+            asyncTasks.forEach(taskCacheQueue::addTask);
+            LOGGER.info("任务通知, 将任务[{}]添加到内存队列中", requestIdSet);
+        });
+
+        return requestIdSet;
+    }
+
+    /**
+     * 取消任务，切换到{@link ExecStatus#FINISH}状态；注意，要更新的任务调用方必须判断状态，内部不做任何判断
+     *
+     * @param task
+     *            要取消的任务
+     */
+    public boolean cancelTask(AsyncTask task) {
+        String ip = Const.IP + StringConst.DOT + config.getInternalTraceService().generate();
+        boolean result = repository.casCancel(task.getRequestId(), task.getStatus(), ip) > 0;
+
+        if (result) {
+            transactionManager.runAfterCommit(() -> {
+                removeTask(Collections.singleton(task.getRequestId()));
+                // 这里使用for update，防止查询到的数据是从库的未及时更新的，不过我们这里没有事务，所以实际上并不会锁定
+                LOGGER.info("任务取消, 从队列移除, [{}]", task.getRequestId());
+            });
+        } else {
+            LOGGER.info("任务取消失败，当前任务: [{}]", task.getRequestId());
+        }
+        return result;
+    }
+
+    /**
+     * 取消任务，切换到{@link ExecStatus#FINISH}状态；注意，要更新的任务调用方必须锁定，并且判断状态，内部不做任何判断
+     *
+     * @param requestIdSet
+     *            任务requestId集合
+     */
+    public void cancelTask(Set<String> requestIdSet) {
+        if (requestIdSet.isEmpty()) {
+            return;
+        }
+
+        String ip = Const.IP + StringConst.DOT + config.getInternalTraceService().generate();
+        repository.batchUpdate(requestIdSet, ExecStatus.FINISH, TaskFinishCode.CANCEL, ip);
+
+        transactionManager.runAfterCommit(() -> {
+            removeTask(requestIdSet);
+            // 这里使用for update，防止查询到的数据是从库的未及时更新的，不过我们这里没有事务，所以实际上并不会锁定
+            LOGGER.info("任务取消, 从队列移除, [{}]", requestIdSet);
+        });
     }
 
     /**

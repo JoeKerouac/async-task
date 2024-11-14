@@ -12,15 +12,6 @@
  */
 package com.github.joekerouac.async.task.service;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
@@ -38,8 +29,16 @@ import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
-
 import lombok.CustomLog;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 异步任务执行引擎
@@ -106,6 +105,9 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
         workers = new Worker[asyncThreadPoolConfig.getCorePoolSize()];
 
         ThreadFactory threadFactory = asyncThreadPoolConfig.getThreadFactory();
+        if (threadFactory == null) {
+            threadFactory = r -> new Thread(r);
+        }
 
         for (int i = 0; i < workers.length; i++) {
             Worker worker = new Worker(() -> {
@@ -135,10 +137,14 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
             });
 
             Thread thread = threadFactory.newThread(worker);
-            if (asyncThreadPoolConfig.getPriority() != null) {
-                thread.setPriority(asyncThreadPoolConfig.getPriority());
+
+            Integer priority = asyncThreadPoolConfig.getPriority();
+            if (priority != null && priority > 0) {
+                thread.setPriority(priority);
             }
-            thread.setName(StringUtils.getOrDefault(asyncThreadPoolConfig.getThreadName(), DEFAULT_THREAD_NAME) + "-" + i);
+
+            thread.setName(
+                StringUtils.getOrDefault(asyncThreadPoolConfig.getThreadName(), DEFAULT_THREAD_NAME) + "-" + i);
             // 强制设置为非daemon线程
             thread.setDaemon(false);
             thread.start();

@@ -84,7 +84,6 @@ public class TestEngine {
         asyncThreadPoolConfig.setCorePoolSize(3);
         asyncThreadPoolConfig.setThreadName("异步任务线程");
         asyncThreadPoolConfig.setPriority(1);
-        asyncThreadPoolConfig.setDefaultContextClassLoader(Thread.currentThread().getContextClassLoader());
 
         AsyncTaskExecutorConfig asyncTaskExecutorConfig = new AsyncTaskExecutorConfig();
         asyncTaskExecutorConfig.setCacheQueueSize(10);
