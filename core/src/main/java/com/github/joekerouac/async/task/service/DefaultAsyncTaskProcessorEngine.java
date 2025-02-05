@@ -12,6 +12,15 @@
  */
 package com.github.joekerouac.async.task.service;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.entity.AsyncTask;
 import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
@@ -29,16 +38,8 @@ import com.github.joekerouac.async.task.spi.TraceService;
 import com.github.joekerouac.common.tools.constant.ExceptionProviderConst;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
-import lombok.CustomLog;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import lombok.CustomLog;
 
 /**
  * 异步任务执行引擎
@@ -212,8 +213,8 @@ public class DefaultAsyncTaskProcessorEngine implements AsyncTaskProcessorEngine
 
         if (processor == null) {
             monitorService.noProcessor(requestId, task.getTask(), task.getProcessor());
-            // 更新状态为没有处理器，无法处理
-            repository.update(requestId, ExecStatus.FINISH, TaskFinishCode.NO_PROCESSOR, null, null, Const.IP);
+            // 如果没有处理器则不处理，可能是处理器还未注册或者被移除了，等待下次处理器被注册后执行
+            repository.update(requestId, ExecStatus.READY, null, null, null, null);
             return;
         }
 

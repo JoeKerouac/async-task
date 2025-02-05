@@ -35,7 +35,7 @@
 
     <properties>
         <slf4j.version>1.7.5</slf4j.version>
-        <lombok.version>1.18.10</lombok.version>
+        <lombok.version>1.18.26</lombok.version>
 
         <testng.version>6.14.3</testng.version>
         <druid.version>1.1.21</druid.version>

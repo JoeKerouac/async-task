@@ -61,4 +61,43 @@ public interface ProcessorRegistry {
      */
     Set<String> getAllTaskType();
 
+    /**
+     * 添加监听
+     *
+     * @param listener
+     *            监听
+     */
+    void addListener(TaskProcessorListener listener);
+
+    interface TaskProcessorListener {
+
+        /**
+         * 任务处理器注册时回调，处理异常时忽略
+         *
+         * @param taskType
+         *            任务类型
+         * @param oldProcessor
+         *            旧任务处理器
+         * @param newProcessor
+         *            任务处理器
+         */
+        default void onRegister(String taskType, AbstractAsyncTaskProcessor<?> oldProcessor,
+            AbstractAsyncTaskProcessor<?> newProcessor) {
+
+        }
+
+        /**
+         * 移除任务处理器时回调，处理异常时忽略
+         *
+         * @param taskType
+         *            任务类型
+         * @param processor
+         *            任务处理器
+         */
+        default void onRemove(String taskType, AbstractAsyncTaskProcessor<?> processor) {
+
+        }
+
+    }
+
 }

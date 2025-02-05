@@ -91,6 +91,8 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
     private volatile boolean start;
 
+    private volatile Set<String> taskTypeGroup;
+
     public DefaultTaskCacheQueue(TaskQueueConfig config, AsyncTaskRepository repository) {
         this.cacheQueueSize = config.getCacheQueueSize();
         this.loadThreshold = config.getLoadThreshold();
@@ -121,12 +123,12 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
 
         long loadInterval = config.getLoadInterval();
         boolean loadTaskFromRepository = config.isLoadTaskFromRepository();
-        Set<String> taskTypeGroup = config.getTaskTypeGroup();
+        Set<String> allTaskTypeGroup = config.getTaskTypeGroup();
         boolean contain = config.isContain();
 
         if (loadTaskFromRepository) {
             LOGGER.info("当前需要从数据库中捞取任务执行, taskTypeGroup: [{}], contain: [{}], loadInterval: [{}], cacheQueueSize: [{}]",
-                taskTypeGroup, contain, loadInterval, cacheQueueSize);
+                allTaskTypeGroup, contain, loadInterval, cacheQueueSize);
             SimpleSchedulerTask schedulerTask = new SimpleSchedulerTask(() -> {
                 // 捞取未来指定时间内的任务
                 LocalDateTime now = LocalDateTime.now();
@@ -140,10 +142,14 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
                     return;
                 }
 
+                if (taskTypeGroup.isEmpty()) {
+                    LOGGER.info("当前需要处理的任务{}为: [{}], 当前实际无法处理任何任务", contain ? "白名单" : "黑名单", allTaskTypeGroup);
+                    return;
+                }
+
                 // 从任务仓库中捞取任务
-                List<AsyncTask> tasks =
-                    repository.selectPage(ExecStatus.READY, now.plusSeconds(Math.max(MAX_TIME, loadInterval * 3 / 2)),
-                        0, cacheQueueSize, taskTypeGroup, contain);
+                List<AsyncTask> tasks = repository.selectPage(ExecStatus.READY,
+                    now.plusSeconds(Math.max(MAX_TIME, loadInterval * 3 / 2)), 0, cacheQueueSize, taskTypeGroup, true);
 
                 if (tasks.isEmpty()) {
                     // 没有捞取到任务，记录下本次捞取
@@ -164,7 +170,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
             schedulerTask.setInitialDelay(0);
             loadTask = schedulerTask;
         } else {
-            LOGGER.warn("当前不需要从数据库中捞取任务执行, taskTypeGroup: [{}], contain: [{}]", taskTypeGroup, contain);
+            LOGGER.warn("当前不需要从数据库中捞取任务执行, taskTypeGroup: [{}], contain: [{}]", allTaskTypeGroup, contain);
             loadTask = null;
         }
     }
@@ -190,6 +196,14 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
         LockTaskUtil.runWithLock(queueLock.writeLock(), condition::signalAll);
         if (loadTask != null) {
             loadTask.stop();
+        }
+    }
+
+    @Override
+    public void refreshTaskTypes(Set<String> taskGroup) {
+        this.taskTypeGroup = taskGroup;
+        if (loadTask != null) {
+            loadTask.scheduler();
         }
     }
 

@@ -37,6 +37,14 @@ public interface TaskCacheQueue {
     void stop();
 
     /**
+     * 刷新当前可以处理的taskType
+     * 
+     * @param taskGroup
+     *            taskGroup
+     */
+    void refreshTaskTypes(Set<String> taskGroup);
+
+    /**
      * 将任务尝试加到缓存
      *
      * @param task

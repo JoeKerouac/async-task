@@ -12,23 +12,6 @@
  */
 package com.github.joekerouac.async.task.impl;
 
-import com.github.joekerouac.async.task.Const;
-import com.github.joekerouac.async.task.entity.AsyncTask;
-import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
-import com.github.joekerouac.async.task.model.ExecStatus;
-import com.github.joekerouac.async.task.model.TaskFinishCode;
-import com.github.joekerouac.async.task.model.TaskGroupConfig;
-import com.github.joekerouac.async.task.service.InternalTraceService;
-import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
-import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine;
-import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
-import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
-import com.github.joekerouac.async.task.spi.MonitorService;
-import com.github.joekerouac.async.task.spi.TaskCacheQueue;
-import com.github.joekerouac.common.tools.constant.StringConst;
-import lombok.CustomLog;
-
-import javax.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
@@ -36,6 +19,29 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+
+import javax.validation.constraints.NotNull;
+
+import com.github.joekerouac.async.task.Const;
+import com.github.joekerouac.async.task.entity.AsyncTask;
+import com.github.joekerouac.async.task.model.AsyncTaskProcessorEngineConfig;
+import com.github.joekerouac.async.task.model.ExecStatus;
+import com.github.joekerouac.async.task.model.TaskFinishCode;
+import com.github.joekerouac.async.task.model.TaskGroupConfig;
+import com.github.joekerouac.async.task.model.TaskQueueConfig;
+import com.github.joekerouac.async.task.service.InternalTraceService;
+import com.github.joekerouac.async.task.spi.AbstractAsyncTaskProcessor;
+import com.github.joekerouac.async.task.spi.AsyncTaskProcessorEngine;
+import com.github.joekerouac.async.task.spi.AsyncTaskRepository;
+import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
+import com.github.joekerouac.async.task.spi.MonitorService;
+import com.github.joekerouac.async.task.spi.ProcessorRegistry;
+import com.github.joekerouac.async.task.spi.TaskCacheQueue;
+import com.github.joekerouac.common.tools.collection.CollectionUtil;
+import com.github.joekerouac.common.tools.constant.StringConst;
+
+import lombok.CustomLog;
 
 /**
  * @author JoeKerouac
@@ -211,6 +217,36 @@ public class TaskGroup {
         taskCacheQueue.start();
         engine = build(config, taskCacheQueue);
         engine.start();
+
+        ProcessorRegistry processorRegistry = config.getProcessorRegistry();
+        processorRegistry.addListener(new ProcessorRegistry.TaskProcessorListener() {
+
+            private void refreshTaskTypes() {
+                Set<String> allTaskType = processorRegistry.getAllTaskType();
+                if (CollectionUtil.isEmpty(allTaskType)) {
+                    taskCacheQueue.refreshTaskTypes(Collections.emptySet());
+                    return;
+                }
+
+                Set<String> taskTypeGroup = allTaskType.stream().filter(taskType -> {
+                    TaskQueueConfig taskQueueConfig = config.getTaskQueueConfig();
+                    Set<String> set = taskQueueConfig.getTaskTypeGroup();
+                    return taskQueueConfig.isContain() == set.contains(taskType);
+                }).collect(Collectors.toSet());
+                taskCacheQueue.refreshTaskTypes(taskTypeGroup);
+            }
+
+            @Override
+            public void onRegister(String taskType, AbstractAsyncTaskProcessor<?> oldProcessor,
+                AbstractAsyncTaskProcessor<?> newProcessor) {
+                refreshTaskTypes();
+            }
+
+            @Override
+            public void onRemove(String taskType, AbstractAsyncTaskProcessor<?> processor) {
+                refreshTaskTypes();
+            }
+        });
 
         Thread monitorThread = new Thread(() -> {
             MonitorService monitorService = config.getMonitorService();
