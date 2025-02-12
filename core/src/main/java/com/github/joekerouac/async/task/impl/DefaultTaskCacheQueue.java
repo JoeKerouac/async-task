@@ -142,7 +142,7 @@ public class DefaultTaskCacheQueue implements TaskCacheQueue {
                     return;
                 }
 
-                if (taskTypeGroup.isEmpty()) {
+                if (taskTypeGroup == null || taskTypeGroup.isEmpty()) {
                     LOGGER.info("当前需要处理的任务{}为: [{}], 当前实际无法处理任何任务", contain ? "白名单" : "黑名单", allTaskTypeGroup);
                     return;
                 }
