@@ -22,8 +22,8 @@ import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.db.AbstractRepository;
 import com.github.joekerouac.async.task.flow.model.TaskNodeMap;
 import com.github.joekerouac.async.task.flow.spi.TaskNodeMapRepository;
-import com.github.joekerouac.async.task.spi.TableNameSelector;
 import com.github.joekerouac.async.task.spi.AsyncTransactionManager;
+import com.github.joekerouac.async.task.spi.TableNameSelector;
 
 /**
  * @author JoeKerouac
@@ -37,6 +37,8 @@ public class TaskNodeMapRepositoryImpl extends AbstractRepository implements Tas
     private static final String GET_ALL_PARENT = "select * from {} where `task_request_id` = ? and `child_node` = ?";
 
     private static final String GET_ALL_CHILD = "select * from {} where `task_request_id` = ? and `parent_node` = ?";
+
+    private static final String GET_ALL_BY_TASK = "select * from {} where `task_request_id` = ? limit ? offset ?";
 
     public TaskNodeMapRepositoryImpl(@NotNull final AsyncTransactionManager transactionManager) {
         this(transactionManager, task -> DEFAULT_TABLE_NAME);
@@ -53,15 +55,23 @@ public class TaskNodeMapRepositoryImpl extends AbstractRepository implements Tas
     }
 
     @Override
-    public List<String> getAllParent(final String taskId, final String nodeRequestId) {
-        return getAll(taskId, nodeRequestId, GET_ALL_PARENT).stream().map(TaskNodeMap::getParentNode)
+    public List<String> getAllParent(final String taskRequestId, final String nodeRequestId) {
+        return getAll(taskRequestId, nodeRequestId, GET_ALL_PARENT).stream().map(TaskNodeMap::getParentNode)
             .filter(req -> !Const.NULL.equals(req)).collect(Collectors.toList());
     }
 
     @Override
-    public List<String> getAllChild(final String taskId, final String nodeRequestId) {
-        return getAll(taskId, nodeRequestId, GET_ALL_CHILD).stream().map(TaskNodeMap::getChildNode)
+    public List<String> getAllChild(final String taskRequestId, final String nodeRequestId) {
+        return getAll(taskRequestId, nodeRequestId, GET_ALL_CHILD).stream().map(TaskNodeMap::getChildNode)
             .filter(req -> !Const.NULL.equals(req)).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<TaskNodeMap> selectByTaskRequestId(String taskRequestId, int offset, int limit) {
+        return runSql(taskRequestId, GET_ALL_BY_TASK, preparedStatement -> {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            return buildModel(resultSet);
+        }, taskRequestId, limit, offset);
     }
 
     private List<TaskNodeMap> getAll(final String taskId, final String nodeRequestId, String sql) {

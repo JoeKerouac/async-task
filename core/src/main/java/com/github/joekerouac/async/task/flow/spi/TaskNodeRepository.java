@@ -71,6 +71,20 @@ public interface TaskNodeRepository {
 
     /**
      * 根据主任务ID和子任务状态分页查询子任务，结果应该按照创建时间升序排序
+     *
+     * @param taskRequestId
+     *            主任务requestId
+     * @param offset
+     *            分页起始位置，从0开始
+     * @param limit
+     *            分页大小，最大100
+     * @return 符合条件的子任务
+     */
+    List<TaskNode> selectByTaskRequestId(@NotBlank String taskRequestId, @Min(0) int offset,
+        @Min(1) @Max(500) int limit);
+
+    /**
+     * 根据主任务ID和子任务状态分页查询子任务，结果应该按照创建时间升序排序
      * 
      * @param taskRequestId
      *            主任务requestId
@@ -83,7 +97,7 @@ public interface TaskNodeRepository {
      * @return 符合条件的子任务
      */
     List<TaskNode> selectByStatus(@NotBlank String taskRequestId, @NotNull TaskNodeStatus nodeStatus,
-        @Min(0) int offset, @Min(1) @Max(200) int limit);
+        @Min(0) int offset, @Min(1) @Max(500) int limit);
 
     /**
      * cas更新节点状态

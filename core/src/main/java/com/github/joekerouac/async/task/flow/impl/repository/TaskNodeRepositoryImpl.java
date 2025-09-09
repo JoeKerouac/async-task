@@ -41,6 +41,9 @@ public class TaskNodeRepositoryImpl extends AbstractRepository implements TaskNo
     private static final String SELECT_BY_REQUEST_IDS =
         "select * from `{}` where `request_id` in (" + PLACEHOLDER + ")";
 
+    private static final String SELECT_BY_TASK_REQUEST_ID =
+        "select * from `{}` where `task_request_id` = ? limit ? offset ?";
+
     private static final String SELECT_BY_STATUS =
         "select * from `{}` where `task_request_id` = ? and `status` = ? limit ? offset ?";
 
@@ -87,6 +90,14 @@ public class TaskNodeRepositoryImpl extends AbstractRepository implements TaskNo
                 ResultSet resultSet = preparedStatement.executeQuery();
                 return buildModel(resultSet);
             }, nodeRequestIds.toArray());
+    }
+
+    @Override
+    public List<TaskNode> selectByTaskRequestId(String taskRequestId, int offset, int limit) {
+        return runSql(taskRequestId, SELECT_BY_TASK_REQUEST_ID, preparedStatement -> {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            return buildModel(resultSet);
+        }, taskRequestId, limit, offset);
     }
 
     @Override

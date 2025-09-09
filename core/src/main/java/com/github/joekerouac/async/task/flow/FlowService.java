@@ -15,6 +15,7 @@ package com.github.joekerouac.async.task.flow;
 import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.model.FlowTaskModel;
+import com.github.joekerouac.async.task.flow.model.SetTaskModel;
 import com.github.joekerouac.async.task.model.ExecStatus;
 import com.github.joekerouac.async.task.model.TransStrategy;
 
@@ -71,6 +72,19 @@ public interface FlowService {
      *             如果当前服务未启动则抛出该异常
      */
     FlowTaskStatus queryTaskStatus(@NotBlank String requestId) throws IllegalArgumentException, IllegalStateException;
+
+    /**
+     * 获取有限集任务
+     * 
+     * @param requestId
+     *            requestId
+     * @return 有限集任务
+     * @throws IllegalArgumentException
+     *             如果传入的requestId参数为空或者任务类型不是有限集任务则抛出该异常
+     * @throws IllegalStateException
+     *             如果当前服务未启动则抛出该异常
+     */
+    SetTaskModel getSetTaskModel(@NotBlank String requestId) throws IllegalArgumentException, IllegalStateException;
 
     /**
      * 根据任务节点的requestId查询任务节点状态

@@ -12,6 +12,18 @@
  */
 package com.github.joekerouac.async.task.flow.service;
 
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 import com.github.joekerouac.async.task.AsyncTaskService;
 import com.github.joekerouac.async.task.Const;
 import com.github.joekerouac.async.task.flow.FlowService;
@@ -52,17 +64,8 @@ import com.github.joekerouac.common.tools.scheduler.TaskDescriptor;
 import com.github.joekerouac.common.tools.string.StringUtils;
 import com.github.joekerouac.common.tools.util.Assert;
 import com.github.joekerouac.common.tools.util.Starter;
-import lombok.CustomLog;
 
-import java.sql.SQLException;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
+import lombok.CustomLog;
 
 /**
  * @author JoeKerouac
@@ -249,6 +252,47 @@ public class FlowServiceImpl implements FlowService {
     }
 
     @Override
+    public SetTaskModel getSetTaskModel(String requestId) throws IllegalArgumentException, IllegalStateException {
+        Assert.notBlank(requestId, StringUtils.format("任务requestId不能为空"),
+            ExceptionProviderConst.IllegalArgumentExceptionProvider);
+        return starter.runWithStarted(() -> {
+            FlowTask flowTask = flowTaskRepository.selectForLock(requestId);
+            if (flowTask == null) {
+                return null;
+            }
+
+            Assert.assertTrue(flowTask.getType() == FlowTaskType.SET,
+                StringUtils.format("当前任务类型不是SetTaskModel: [{}:{}]", requestId, flowTask.getType()),
+                ExceptionProviderConst.IllegalArgumentExceptionProvider);
+
+            List<TaskNode> taskNodeList = new ArrayList<>();
+            int batchSize = 500;
+            int offset = 0;
+            while (true) {
+                List<TaskNode> list = taskNodeRepository.selectByTaskRequestId(requestId, offset, batchSize);
+                taskNodeList.addAll(list);
+                if (list.isEmpty() || list.size() < 500) {
+                    break;
+                }
+                offset += 500;
+            }
+
+            List<TaskNodeMap> taskNodeMapList = new ArrayList<>();
+            offset = 0;
+            while (true) {
+                List<TaskNodeMap> list = taskNodeMapRepository.selectByTaskRequestId(requestId, offset, batchSize);
+                taskNodeMapList.addAll(list);
+                if (list.isEmpty() || list.size() < 500) {
+                    break;
+                }
+                offset += 500;
+            }
+
+            return convert(flowTask, taskNodeList, taskNodeMapList);
+        });
+    }
+
+    @Override
     public TaskNodeStatus queryNodeStatus(final String nodeRequestId) {
         Assert.notBlank(nodeRequestId, StringUtils.format("任务节点requestId不能为空"),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
@@ -266,6 +310,74 @@ public class FlowServiceImpl implements FlowService {
     @Override
     public Set<String> notifyNode(Set<String> requestIdSet, TransStrategy transStrategy) {
         return asyncTaskService.notifyTask(requestIdSet, transStrategy);
+    }
+
+    /**
+     * 将数据库中的任务重新构建为内存模型
+     * 
+     * @param task
+     *            主任务
+     * @param taskNodeList
+     *            所有节点列表
+     * @param taskNodeMapList
+     *            节点关系列表
+     * @return 有限集任务模型
+     */
+    private SetTaskModel convert(FlowTask task, List<TaskNode> taskNodeList, List<TaskNodeMap> taskNodeMapList) {
+        Map<String, TaskNode> nodeMap =
+            taskNodeList.stream().collect(Collectors.toMap(TaskNode::getRequestId, Function.identity()));
+
+        Map<String, TaskNodeModel> taskNodeModelMap = new HashMap<>();
+        Map<String, String> parentMap = new HashMap<>();
+        for (TaskNodeMap taskNodeMap : taskNodeMapList) {
+            parentMap.put(taskNodeMap.getChildNode(), taskNodeMap.getParentNode());
+            TaskNode parentTaskNode = nodeMap.get(taskNodeMap.getParentNode());
+            TaskNode childTaskNode = nodeMap.get(taskNodeMap.getChildNode());
+            TaskNodeModel parentNodeModel =
+                taskNodeModelMap.computeIfAbsent(parentTaskNode.getRequestId(), requestId -> convert(parentTaskNode));
+            TaskNodeModel childNodeModel =
+                taskNodeModelMap.computeIfAbsent(childTaskNode.getRequestId(), requestId -> convert(childTaskNode));
+            parentNodeModel.getAllChild().add(childNodeModel);
+        }
+
+        TaskNodeModel firstTask = null;
+        TaskNodeModel lastTask = null;
+        for (TaskNodeModel nodeModel : taskNodeModelMap.values()) {
+            if (!parentMap.containsKey(nodeModel.getRequestId())) {
+                if (firstTask != null) {
+                    throw new RuntimeException(
+                        StringUtils.format("当前有两个父节点: [{}], [{}], [{}]", task, nodeModel, firstTask));
+                }
+                firstTask = nodeModel;
+            } else if (nodeModel.getAllChild().isEmpty()) {
+                if (lastTask != null) {
+                    throw new RuntimeException(
+                        StringUtils.format("当前有两个尾节点: [{}], [{}], [{}]", task, nodeModel, lastTask));
+                }
+                lastTask = nodeModel;
+            }
+        }
+
+        SetTaskModel taskModel = new SetTaskModel();
+        taskModel.setRequestId(task.getRequestId());
+        taskModel.setFirstTask(firstTask);
+        taskModel.setLastTask(lastTask);
+        return taskModel;
+    }
+
+    private TaskNodeModel convert(TaskNode taskNode) {
+        String processorName = taskNode.getProcessor();
+        AbstractAsyncTaskProcessor<?> processor = processorRegistry.getProcessor(processorName);
+        TaskNodeModel taskNodeModel = new TaskNodeModel();
+        taskNodeModel.setRequestId(taskNode.getRequestId());
+        taskNodeModel.setData(processor.deserialize(taskNode.getRequestId(), taskNode.getNodeData(), new HashMap<>()));
+        taskNodeModel.setProcessor(processorName);
+        taskNodeModel.setFailStrategy(taskNode.getFailStrategy());
+        taskNodeModel.setExecuteStrategy(taskNode.getExecuteStrategy());
+        taskNodeModel.setMaxRetry(taskNode.getMaxRetry());
+        taskNodeModel.setStrategyContext(taskNode.getStrategyContext());
+        taskNodeModel.setAllChild(new ArrayList<>());
+        return taskNodeModel;
     }
 
     /**

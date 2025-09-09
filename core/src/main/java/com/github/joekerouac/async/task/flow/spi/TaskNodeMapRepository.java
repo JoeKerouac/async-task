@@ -35,23 +35,36 @@ public interface TaskNodeMapRepository {
     /**
      * 获取指定任务的所有父节点
      * 
-     * @param taskId
+     * @param taskRequestId
      *            主任务 request ID
      * @param nodeRequestId
      *            节点 request ID
      * @return 指定任务节点的所有父节点ID
      */
-    List<String> getAllParent(String taskId, String nodeRequestId);
+    List<String> getAllParent(String taskRequestId, String nodeRequestId);
 
     /**
      * 获取指定任务的所有子节点
      * 
-     * @param taskId
+     * @param taskRequestId
      *            主任务 request ID
      * @param nodeRequestId
      *            节点 request ID
      * @return 指定任务节点的所有子节点ID
      */
-    List<String> getAllChild(String taskId, String nodeRequestId);
+    List<String> getAllChild(String taskRequestId, String nodeRequestId);
+
+    /**
+     * 根据taskRequestId分页查询TaskNodeMap
+     * 
+     * @param taskRequestId
+     *            taskRequestId
+     * @param offset
+     *            offset
+     * @param limit
+     *            limit
+     * @return 结果
+     */
+    List<TaskNodeMap> selectByTaskRequestId(String taskRequestId, int offset, int limit);
 
 }
