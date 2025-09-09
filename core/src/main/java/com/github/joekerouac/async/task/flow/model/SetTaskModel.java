@@ -17,6 +17,7 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
+import com.github.joekerouac.async.task.flow.enums.FlowTaskStatus;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -53,5 +54,10 @@ public class SetTaskModel implements FlowTaskModel {
     @Valid
     @NotNull
     private TaskNodeModel lastTask;
+
+    /**
+     * 任务状态，查询时返回，创建时无需设置，不会消费
+     */
+    private FlowTaskStatus status;
 
 }

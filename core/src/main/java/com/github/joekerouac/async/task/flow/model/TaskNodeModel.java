@@ -21,6 +21,7 @@ import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
 import com.github.joekerouac.async.task.flow.enums.FailStrategy;
+import com.github.joekerouac.async.task.flow.enums.TaskNodeStatus;
 import com.github.joekerouac.async.task.flow.impl.StrategyConst;
 
 import lombok.Getter;
@@ -88,5 +89,11 @@ public class TaskNodeModel {
      */
     @Valid
     private List<TaskNodeModel> allChild;
+
+    /**
+     * 节点任务状态，查询时返回，创建时无需设置，不会消费
+     */
+    @NotNull
+    private TaskNodeStatus status;
 
 }

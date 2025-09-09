@@ -360,6 +360,7 @@ public class FlowServiceImpl implements FlowService {
 
         SetTaskModel taskModel = new SetTaskModel();
         taskModel.setRequestId(task.getRequestId());
+        taskModel.setStatus(task.getStatus());
         taskModel.setFirstTask(firstTask);
         taskModel.setLastTask(lastTask);
         return taskModel;
@@ -370,6 +371,7 @@ public class FlowServiceImpl implements FlowService {
         AbstractAsyncTaskProcessor<?> processor = processorRegistry.getProcessor(processorName);
         TaskNodeModel taskNodeModel = new TaskNodeModel();
         taskNodeModel.setRequestId(taskNode.getRequestId());
+        taskNodeModel.setStatus(taskNode.getStatus());
         taskNodeModel.setData(processor.deserialize(taskNode.getRequestId(), taskNode.getNodeData(), new HashMap<>()));
         taskNodeModel.setProcessor(processorName);
         taskNodeModel.setFailStrategy(taskNode.getFailStrategy());
