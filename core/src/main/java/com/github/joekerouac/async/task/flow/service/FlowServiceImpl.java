@@ -227,12 +227,21 @@ public class FlowServiceImpl implements FlowService {
         starter.runWithStarted(() -> {
             Const.VALIDATION_SERVICE.validate(task);
             if (task instanceof SetTaskModel) {
-                addSetTask((SetTaskModel)task);
+                addSetTask((SetTaskModel)task, true);
             } else if (task instanceof StreamTaskModel) {
                 addStreamTask((StreamTaskModel)task);
             } else {
                 throw new UnsupportedOperationException(StringUtils.format("不支持的task类型： [{}]", task.getClass()));
             }
+        });
+    }
+
+    @Override
+    public void addTask(SetTaskModel task, boolean run) throws IllegalArgumentException, IllegalStateException {
+        Assert.notNull(task, "要添加的任务不能为null", ExceptionProviderConst.IllegalArgumentExceptionProvider);
+        starter.runWithStarted(() -> {
+            Const.VALIDATION_SERVICE.validate(task);
+            addSetTask(task, run);
         });
     }
 
@@ -647,7 +656,7 @@ public class FlowServiceImpl implements FlowService {
      * @param taskModel
      *            任务
      */
-    private void addSetTask(SetTaskModel taskModel) {
+    private void addSetTask(SetTaskModel taskModel, boolean run) {
         String flowRequestId = taskModel.getRequestId();
         // 先构建主任务
         FlowTask flowTask = new FlowTask();
@@ -682,8 +691,10 @@ public class FlowServiceImpl implements FlowService {
 
         });
 
-        // 注意，这个一定要放在事务执行后再执行，否则会有时序问题
-        asyncTaskService.notifyTask(flowTask.getFirstTaskId());
+        if (run) {
+            // 注意，这个一定要放在事务执行后再执行，否则会有时序问题，因为当前可能在已有事务上下文中执行，所以这里还是要包一下确保是在事务提交后执行
+            transactionManager.runAfterCommit(() -> asyncTaskService.notifyTask(flowTask.getFirstTaskId()));
+        }
     }
 
     /**

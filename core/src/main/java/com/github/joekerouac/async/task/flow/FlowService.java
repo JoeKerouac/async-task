@@ -53,6 +53,20 @@ public interface FlowService {
     void addTask(@NotNull FlowTaskModel task) throws IllegalArgumentException, IllegalStateException;
 
     /**
+     * 添加任务，如果当前存在事务，应该加入事务，如果当前没有事务，则创建事务并在事务中运行
+     *
+     * @param task
+     *            待添加的任务，不允许为null
+     * @param run
+     *            是否立即执行，true表示立即执行
+     * @throws IllegalArgumentException
+     *             如果要添加的任务为空则抛出该异常
+     * @throws IllegalStateException
+     *             如果当前服务未启动则抛出该异常
+     */
+    void addTask(@NotNull SetTaskModel task, boolean run) throws IllegalArgumentException, IllegalStateException;
+
+    /**
      * 结束指定流，后续往该流添加的任务将无法被调度
      * 
      * @param streamId
