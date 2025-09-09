@@ -93,7 +93,6 @@ public class TaskNodeModel {
     /**
      * 节点任务状态，查询时返回，创建时无需设置，不会消费
      */
-    @NotNull
     private TaskNodeStatus status;
 
 }
