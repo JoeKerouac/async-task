@@ -581,7 +581,7 @@ public class FlowServiceImpl implements FlowService {
         task.setStatus(FlowTaskStatus.RUNNING);
 
         Pair<List<TaskNode>, List<TaskNodeMap>> pair = buildGraph(firstTask, 1, streamId, null,
-            new Pair<>(new ArrayList<>(), new ArrayList<>()), new HashSet<>(), new HashSet<>());
+            new Pair<>(new ArrayList<>(), new ArrayList<>()), new HashSet<>(), new HashSet<>(), new HashMap<>());
         List<TaskNode> nodes = pair.getKey();
 
         task.setLastTaskId(nodes.get(nodes.size() - 1).getRequestId());
@@ -670,7 +670,7 @@ public class FlowServiceImpl implements FlowService {
         // 构建节点关系图
         Pair<List<TaskNode>, List<TaskNodeMap>> pair =
             buildGraph(taskModel.getFirstTask(), 0, flowRequestId, taskModel.getLastTask(),
-                new Pair<>(new ArrayList<>(), new ArrayList<>()), new HashSet<>(), new HashSet<>());
+                new Pair<>(new ArrayList<>(), new ArrayList<>()), new HashSet<>(), new HashSet<>(), new HashMap<>());
 
         // 开启事务
         transactionManager.runWithTrans(TransStrategy.REQUIRED, () -> {
@@ -714,11 +714,13 @@ public class FlowServiceImpl implements FlowService {
      *            用于循环检测的冗余集合
      * @param allNodes
      *            所有添加过的节点，防止重复添加；PS：如果没有这个校验，在一个节点有多个父/子节点的时候可能会出错；
+     * @param graphMap
+     *            如果有两个并行的节点a、b，在某个节点c开始合并，那么此时循环构建map时会发现从a节点遍历时构建了一遍c节点以后的关系，从b节点遍历时又构建了一遍c节点以后的关系，这会导致c节点之后的关系是多份的，这个map就是解决这个问题的
      * @return 构建好的有向无环图集合
      */
     private Pair<List<TaskNode>, List<TaskNodeMap>> buildGraph(TaskNodeModel model, int maxChildSize,
         String flowTaskRequestId, TaskNodeModel lastNode, Pair<List<TaskNode>, List<TaskNodeMap>> pair,
-        Set<String> existNode, Set<String> allNodes) {
+        Set<String> existNode, Set<String> allNodes, Map<String, Set<String>> graphMap) {
         Assert.assertTrue(existNode.add(model.getRequestId()),
             StringUtils.format("当前在依赖 [{}] 处存在环形依赖，请检测， [{}]", model.getRequestId(), existNode),
             ExceptionProviderConst.IllegalArgumentExceptionProvider);
@@ -748,14 +750,18 @@ public class FlowServiceImpl implements FlowService {
 
             for (final TaskNodeModel child : allChild) {
                 // 构建节点关系存储到图中
-                TaskNodeMap map = new TaskNodeMap();
-                map.setId(idGenerator.generateId());
-                map.setTaskRequestId(flowTaskRequestId);
-                map.setParentNode(model.getRequestId());
-                map.setChildNode(child.getRequestId());
-                pair.getValue().add(map);
+                Set<String> set = graphMap.computeIfAbsent(model.getRequestId(), k -> new HashSet<>());
+                if (set.add(child.getRequestId())) {
 
-                buildGraph(child, maxChildSize, flowTaskRequestId, lastNode, pair, existNode, allNodes);
+                    TaskNodeMap map = new TaskNodeMap();
+                    map.setId(idGenerator.generateId());
+                    map.setTaskRequestId(flowTaskRequestId);
+                    map.setParentNode(model.getRequestId());
+                    map.setChildNode(child.getRequestId());
+                    pair.getValue().add(map);
+                }
+
+                buildGraph(child, maxChildSize, flowTaskRequestId, lastNode, pair, existNode, allNodes, graphMap);
             }
         }
 
